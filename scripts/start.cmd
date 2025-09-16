@@ -1,0 +1,1 @@
+gomapproxy.exe -c ./configs/config.yaml

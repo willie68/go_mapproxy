@@ -1,0 +1,8 @@
+port: 8580
+cache: ./testdata/cache
+logging:
+  level: info
+wmss: 
+  gebco:
+    url: https://geoserver.openseamap.org/geoserver/gwc/service/wms
+    layers: gebco2021:gebco_2021
