@@ -1,5 +1,6 @@
 # go_mapproxy
-A minimal mapproxy for converting TMS request to an WMS Tileserver, written in go
+A minimal mapproxy for converting TMS request to an WMS Tileserver, written in go, using slippy map ordered tiles.
+https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 
 ## features
 - take a tms request
