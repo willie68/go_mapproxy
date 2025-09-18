@@ -1,0 +1,131 @@
+package tilecache
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strconv"
+	"time"
+
+	"github.com/samber/do/v2"
+	"github.com/willie68/go_mapproxy/internal/logging"
+	"github.com/willie68/go_mapproxy/internal/model"
+)
+
+type TileCache interface {
+	Tile(tile model.Tile) (io.Reader, bool)
+	Save(tile model.Tile, data io.Reader) error
+	IsActive() bool
+}
+
+type Config struct {
+	Path   string `yaml:"path"`
+	Active bool   `yaml:"active"`
+	MaxAge int    `yaml:"maxage"` // in hours
+}
+
+type Cache struct {
+	log    *logging.Logger
+	path   string
+	active bool
+	maxage int // in hours
+}
+
+func New() *Cache {
+	cfg := do.MustInvoke[*Config](nil)
+	c := &Cache{
+		log:    logging.New().WithName("tilecache"),
+		path:   cfg.Path,
+		active: cfg.Active,
+		maxage: cfg.MaxAge,
+	}
+	c.init()
+	return c
+}
+
+func (c *Cache) init() {
+	if c.active {
+		c.startCacheCleanupJob()
+	}
+	do.ProvideValue(nil, c)
+}
+
+func (c *Cache) startCacheCleanupJob() {
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for {
+			<-ticker.C
+			err := c.CleanupOldFiles(time.Duration(c.maxage) * time.Hour)
+			if err != nil {
+				c.log.Errorf("cache cleanup error: %v", err)
+			} else {
+				c.log.Infof("cache cleanup completed")
+			}
+		}
+	}()
+}
+
+func (c *Cache) IsActive() bool {
+	return c.active
+}
+
+func (c *Cache) Tile(tile model.Tile) (io.Reader, bool) {
+	if !c.active {
+		return nil, false
+	}
+	fname := c.getFilename(tile)
+	if _, err := os.Stat(fname); err != nil {
+		return nil, false
+	}
+	f, err := os.Open(fname)
+	if err != nil {
+		return nil, false
+	}
+	return f, true
+}
+
+func (c *Cache) Save(tile model.Tile, data io.Reader) error {
+	if !c.active {
+		return nil
+	}
+	fn := c.getFilename(tile)
+	if err := os.MkdirAll(filepath.Dir(fn), 0o755); err != nil {
+		return err
+	}
+	f, err := os.Create(fn)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = io.Copy(f, data)
+	return err
+}
+
+// CleanupOldFiles deletes cache files older than the given duration.
+func (c *Cache) CleanupOldFiles(olderThan time.Duration) error {
+	root := c.path // adjust if your cache path is named differently
+	now := time.Now()
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		modTime := info.ModTime()
+		if now.Sub(modTime) > olderThan {
+			c.log.Debugf("removing old cache file: %s", path)
+			err := os.Remove(path)
+			if err != nil {
+				c.log.Errorf("error removing file %s: %v", path, err)
+			}
+		}
+		return nil
+	})
+}
+
+func (c *Cache) getFilename(tile model.Tile) string {
+	return filepath.Join(c.path, tile.System, strconv.Itoa(tile.Z), strconv.Itoa(tile.X), fmt.Sprintf("%d.png", tile.Y))
+}

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/aphistic/golf"
+	"github.com/samber/do/v2"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -65,7 +66,8 @@ func init() {
 }
 
 // Init initialise the root logger with the given config
-func Init(cfg Config) {
+func Init() {
+	cfg := do.MustInvoke[*Config](nil)
 	Root.SetLevel(cfg.Level)
 	Root.GelfURL = cfg.Gelfurl
 	Root.GelfPort = cfg.Gelfport

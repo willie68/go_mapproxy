@@ -12,5 +12,7 @@ require (
 	github.com/aphistic/sweet v0.3.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/onsi/gomega v1.38.2 // indirect
+	github.com/samber/do/v2 v2.0.0-rc1 // indirect
+	github.com/samber/go-type-to-string v1.8.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 )

@@ -1,8 +1,14 @@
 port: 8580
-cache: ./testdata/cache
+cache:
+  active: false
+  path: ./testdata/cache
+  maxage: 2160 # in hours, 90 days = 2160
+
 logging:
-  level: info
+  level: debug
+
 wmss: 
   gebco:
     url: https://geoserver.openseamap.org/geoserver/gwc/service/wms
     layers: gebco2021:gebco_2021
+    format: image/png
