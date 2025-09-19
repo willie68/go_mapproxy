@@ -2,7 +2,7 @@
 A minimal mapproxy for converting TMS request to an WMS Tileserver, written in go, using slippy map ordered tiles.
 https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 
-## features
+## work steps
 - take a tms request
 - convert xyz to wms bounding box
 - do the wms request on the desired server, server configurable in a config 
