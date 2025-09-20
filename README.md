@@ -16,4 +16,9 @@ https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 ## configuration
 see configs/config.yaml
 
+## prefetching of tiles
 
+You can prefetch a single system with the `system` and `zoom` parameter. All tiles of the the system from 0 to zoom will be prefetched. Be aware you need the space for that. Prefechting with level 8 is round about 1GB. (depends on the wms provider) Level 9 ~ 5GB... (And it will take some time)
+example: `gomapproxy .c config.yaml -s gebco -z 9`
+
+This will prefetch all tiles from the server with the alias gebco from zomm level 0 to 9.
