@@ -83,5 +83,5 @@ func (v *Version) JSON() (string, error) {
 }
 
 func (v *Version) String() string {
-	return fmt.Sprintf("gomapproxy Version %s, commit: %s, builddate: %s", v.version, v.commit, v.date)
+	return fmt.Sprintf("gomapproxy Version %s, builddate: %s, commit: %s", v.version, v.date, v.commit)
 }

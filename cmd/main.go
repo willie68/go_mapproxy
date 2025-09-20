@@ -13,21 +13,21 @@ import (
 )
 
 var (
-	log        *logging.Logger
-	configFile string
-	cache      *tilecache.Cache
-	version    bool
+	log         *logging.Logger
+	configFile  string
+	showVersion bool
 )
 
 func init() {
-	flag.BoolVarP(&version, "version", "v", false, "showing the version")
+	flag.BoolVarP(&showVersion, "version", "v", false, "showing the version")
 	flag.StringVarP(&configFile, "config", "c", "config.yaml", "this is the path and filename to the config file")
 }
 
 func main() {
 	flag.Parse()
-	if version {
+	if showVersion {
 		fmt.Println(config.NewVersion().String())
+		fmt.Println("more on https://github.com/willie68/go_mapproxy")
 		os.Exit(0)
 	}
 	err := config.Load(configFile)

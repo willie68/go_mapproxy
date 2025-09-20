@@ -1,6 +1,6 @@
 port: 8580
 cache:
-  active: false
+  active: true
   path: ./testdata/cache
   maxage: 2160 # in hours, 90 days = 2160
 

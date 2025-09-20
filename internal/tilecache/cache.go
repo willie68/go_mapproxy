@@ -83,6 +83,8 @@ func (c *Cache) Tile(tile model.Tile) (io.Reader, bool) {
 		return nil, false
 	}
 	fname := c.getFilename(tile)
+	c.flock.RLock()
+	defer c.flock.RUnlock()
 	if _, err := os.Stat(fname); err != nil {
 		return nil, false
 	}
@@ -99,12 +101,14 @@ func (c *Cache) Save(tile model.Tile, data io.Reader) error {
 	}
 	fn := c.getFilename(tile)
 	// only cache if the file does not exists
-	c.flock.RLocker().Lock()
-	defer c.flock.Unlock()
+	c.flock.RLock()
 	if _, err := os.Stat(fn); errors.Is(err, os.ErrNotExist) {
 		if err := os.MkdirAll(filepath.Dir(fn), 0o755); err != nil {
 			return err
 		}
+		c.flock.RUnlock()
+		c.flock.Lock()
+		defer c.flock.Unlock()
 		f, err := os.Create(fn)
 		if err != nil {
 			return err
@@ -112,6 +116,8 @@ func (c *Cache) Save(tile model.Tile, data io.Reader) error {
 		defer f.Close()
 		_, err = io.Copy(f, data)
 		return err
+	} else {
+		c.flock.RUnlock()
 	}
 	return nil
 }
@@ -130,13 +136,19 @@ func (c *Cache) CleanupOldFiles(olderThan time.Duration) error {
 		modTime := info.ModTime()
 		if now.Sub(modTime) > olderThan {
 			c.log.Debugf("removing old cache file: %s", path)
-			err := os.Remove(path)
-			if err != nil {
-				c.log.Errorf("error removing file %s: %v", path, err)
-			}
+			c.deleteFile(path)
 		}
 		return nil
 	})
+}
+
+func (c *Cache) deleteFile(path string) {
+	c.flock.Lock()
+	defer c.flock.Unlock()
+	err := os.Remove(path)
+	if err != nil {
+		c.log.Errorf("error removing file %s: %v", path, err)
+	}
 }
 
 func (c *Cache) getFilename(tile model.Tile) string {
