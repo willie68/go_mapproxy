@@ -6,19 +6,23 @@ import (
 	"os"
 
 	flag "github.com/spf13/pflag"
+	"github.com/willie68/go_mapproxy/configs"
 	"github.com/willie68/go_mapproxy/internal/api"
 	"github.com/willie68/go_mapproxy/internal/config"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/tilecache"
+	"github.com/willie68/gowillie68/pkg/fileutils"
 )
 
 var (
 	log         *logging.Logger
 	configFile  string
 	showVersion bool
+	initConfig  bool
 )
 
 func init() {
+	flag.BoolVarP(&initConfig, "init", "i", false, "init config, writes out a default config.")
 	flag.BoolVarP(&showVersion, "version", "v", false, "showing the version")
 	flag.StringVarP(&configFile, "config", "c", "config.yaml", "this is the path and filename to the config file")
 }
@@ -29,6 +33,15 @@ func main() {
 		fmt.Println(config.NewVersion().String())
 		fmt.Println("more on https://github.com/willie68/go_mapproxy")
 		os.Exit(0)
+	}
+	if initConfig {
+		fmt.Println(configs.ConfigFile)
+		os.Exit(0)
+	}
+	if !fileutils.FileExists(configFile) {
+		fmt.Fprint(os.Stderr, "no config given or dosn't exists.\r\n")
+		showUsage()
+		os.Exit(1)
 	}
 	err := config.Load(configFile)
 	if err != nil {
@@ -53,4 +66,10 @@ func main() {
 		log.Fatalf("error on listen and serv: %v", err)
 	}
 	log.Info("server finished")
+}
+
+func showUsage() {
+	fmt.Println("usage: gomapproxy -c config.yaml")
+	fmt.Println("example config: gomapproxy -i")
+	fmt.Println("version: gomapproxy -v")
 }
