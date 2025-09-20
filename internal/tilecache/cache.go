@@ -1,11 +1,15 @@
 package tilecache
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/samber/do/v2"
@@ -30,6 +34,8 @@ type Cache struct {
 	path   string
 	active bool
 	maxage int // in hours
+
+	flock sync.RWMutex
 }
 
 func New() *Cache {
@@ -39,6 +45,7 @@ func New() *Cache {
 		path:   cfg.Path,
 		active: cfg.Active,
 		maxage: cfg.MaxAge,
+		flock:  sync.RWMutex{},
 	}
 	c.init()
 	return c
@@ -91,16 +98,22 @@ func (c *Cache) Save(tile model.Tile, data io.Reader) error {
 		return nil
 	}
 	fn := c.getFilename(tile)
-	if err := os.MkdirAll(filepath.Dir(fn), 0o755); err != nil {
+	// only cache if the file does not exists
+	c.flock.RLocker().Lock()
+	defer c.flock.Unlock()
+	if _, err := os.Stat(fn); errors.Is(err, os.ErrNotExist) {
+		if err := os.MkdirAll(filepath.Dir(fn), 0o755); err != nil {
+			return err
+		}
+		f, err := os.Create(fn)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		_, err = io.Copy(f, data)
 		return err
 	}
-	f, err := os.Create(fn)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	_, err = io.Copy(f, data)
-	return err
+	return nil
 }
 
 // CleanupOldFiles deletes cache files older than the given duration.
@@ -128,4 +141,18 @@ func (c *Cache) CleanupOldFiles(olderThan time.Duration) error {
 
 func (c *Cache) getFilename(tile model.Tile) string {
 	return filepath.Join(c.path, tile.System, strconv.Itoa(tile.Z), strconv.Itoa(tile.X), fmt.Sprintf("%d.png", tile.Y))
+}
+
+func (c *Cache) GetFileHash(fileStr string) string {
+	f, err := os.Open(fileStr)
+	if err != nil {
+		c.log.Fatalf("error opening file: %v", err)
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		c.log.Fatalf("error building hash: %v", err)
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }

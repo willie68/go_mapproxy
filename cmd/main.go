@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 
 	flag "github.com/spf13/pflag"
 	"github.com/willie68/go_mapproxy/internal/api"
@@ -15,14 +16,20 @@ var (
 	log        *logging.Logger
 	configFile string
 	cache      *tilecache.Cache
+	version    bool
 )
 
 func init() {
+	flag.BoolVarP(&version, "version", "v", false, "showing the version")
 	flag.StringVarP(&configFile, "config", "c", "config.yaml", "this is the path and filename to the config file")
 }
 
 func main() {
 	flag.Parse()
+	if version {
+		fmt.Println(config.NewVersion().String())
+		os.Exit(0)
+	}
 	err := config.Load(configFile)
 	if err != nil {
 		panic(err)

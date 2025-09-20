@@ -32,3 +32,5 @@ go.work.sum
 # .vscode/
 
 testdata/cache/
+
+dist/
