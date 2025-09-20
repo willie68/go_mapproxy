@@ -7,10 +7,11 @@ import (
 
 	flag "github.com/spf13/pflag"
 	"github.com/willie68/go_mapproxy/configs"
+	"github.com/willie68/go_mapproxy/internal"
 	"github.com/willie68/go_mapproxy/internal/api"
 	"github.com/willie68/go_mapproxy/internal/config"
 	"github.com/willie68/go_mapproxy/internal/logging"
-	"github.com/willie68/go_mapproxy/internal/tilecache"
+	"github.com/willie68/go_mapproxy/internal/prefetch"
 	"github.com/willie68/gowillie68/pkg/fileutils"
 )
 
@@ -19,12 +20,16 @@ var (
 	configFile  string
 	showVersion bool
 	initConfig  bool
+	pfZoom      int
+	pfSystem    string
 )
 
 func init() {
 	flag.BoolVarP(&initConfig, "init", "i", false, "init config, writes out a default config.")
 	flag.BoolVarP(&showVersion, "version", "v", false, "showing the version")
 	flag.StringVarP(&configFile, "config", "c", "config.yaml", "this is the path and filename to the config file")
+	flag.IntVarP(&pfZoom, "zoom", "z", 0, "max zoom for prefetch tiles")
+	flag.StringVarP(&pfSystem, "system", "s", "", "prefetch system, if empty no prefetching will be done")
 }
 
 func main() {
@@ -53,14 +58,20 @@ func main() {
 		panic(err)
 	}
 	fmt.Printf("Config:\n%s\n", js)
-
-	logging.Init()
 	log = logging.New().WithName("main")
 	log.Info("starting tms service")
 
-	tilecache.New()
+	internal.Init()
 
-	http.HandleFunc("/", api.NewTMSHandler().Handler)
+	if pfSystem != "" && pfZoom > 0 {
+		go func() {
+			log.Infof("starting prefetch for system %s with zoom %d", pfSystem, pfZoom)
+			prefetch.Prefetch(pfSystem, pfZoom)
+			log.Info("prefetch finnished")
+		}()
+	}
+
+	http.HandleFunc("/", api.NewTMSHandler(internal.Inj).Handler)
 	err = http.ListenAndServe(fmt.Sprintf(":%d", config.Get().Port), nil)
 	if err != nil {
 		log.Fatalf("error on listen and serv: %v", err)
@@ -69,7 +80,5 @@ func main() {
 }
 
 func showUsage() {
-	fmt.Println("usage: gomapproxy -c config.yaml")
-	fmt.Println("example config: gomapproxy -i")
-	fmt.Println("version: gomapproxy -v")
+	flag.Usage()
 }

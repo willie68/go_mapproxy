@@ -41,12 +41,17 @@ func Load(file string) error {
 	if err != nil {
 		return fmt.Errorf("can't unmarshal config file: %s", err.Error())
 	}
-	do.ProvideValue(nil, &config)
-	do.ProvideValue(nil, &config.Cache)
-	do.ProvideValue(nil, &config.Logging)
-	do.ProvideValue(nil, config.WMSS)
-
 	return nil
+}
+
+func Init(inj do.Injector) {
+	do.ProvideValue(inj, &config)
+	do.ProvideValue(inj, &config.Cache)
+	do.ProvideValue(inj, &config.Logging)
+	do.ProvideValue(inj, config.WMSS)
+
+	ver := NewVersion()
+	do.ProvideValue(inj, *ver)
 }
 
 func (c *Config) ToJSON() (string, error) {

@@ -66,8 +66,8 @@ func init() {
 }
 
 // Init initialise the root logger with the given config
-func Init() {
-	cfg := do.MustInvoke[*Config](nil)
+func Init(inj do.Injector) {
+	cfg := do.MustInvoke[*Config](inj)
 	Root.SetLevel(cfg.Level)
 	Root.GelfURL = cfg.Gelfurl
 	Root.GelfPort = cfg.Gelfport

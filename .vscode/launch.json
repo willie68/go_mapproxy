@@ -13,7 +13,7 @@
             "output": "debug.exe",
             "cwd": "${workspaceFolder}",
             "args": [
-                "--config", "${workspaceFolder}/configs/config.yaml"
+                "--config", "${workspaceFolder}/configs/config_cache.yaml"
             ]
         },
         {
@@ -25,6 +25,23 @@
             "output": "debug.exe",
             "cwd": "${workspaceFolder}",
             "args": ["-i"]
+        },
+        {
+            "name": "gomap prefetch",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/cmd/main.go",
+            "output": "debug.exe",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "--config", 
+                "${workspaceFolder}/configs/config_cache.yaml",
+                "-s",
+                "gebco",
+                "-z",
+                "10"
+            ]
         }
     ]
 }

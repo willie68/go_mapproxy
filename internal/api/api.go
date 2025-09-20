@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/samber/do/v2"
+	"github.com/willie68/go_mapproxy/internal"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/mercantile"
 	"github.com/willie68/go_mapproxy/internal/model"
@@ -25,11 +25,11 @@ type TMSHandler struct {
 	wmss  wms.WMSConfigMap
 }
 
-func NewTMSHandler() *TMSHandler {
+func NewTMSHandler(inj do.Injector) *TMSHandler {
 	return &TMSHandler{
 		log:   logging.New().WithName("api"),
-		cache: do.MustInvokeAs[tilecache.TileCache](nil),
-		wmss:  do.MustInvoke[wms.WMSConfigMap](nil),
+		cache: do.MustInvokeAs[tilecache.TileCache](inj),
+		wmss:  do.MustInvoke[wms.WMSConfigMap](inj),
 	}
 }
 
@@ -54,34 +54,27 @@ func (h *TMSHandler) Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wmsURL := h.buildWMSUrl(tile)
-
-	resp, err := http.Get(wmsURL)
-	if err != nil || resp.StatusCode != 200 {
-		if resp.Body != nil {
-			bodyBytes, err := io.ReadAll(resp.Body)
-			if err != nil {
-				http.Error(w, "Read error", http.StatusInternalServerError)
-				return
-			}
-			bodyString := string(bodyBytes)
-			h.log.Errorf("body: %s", bodyString)
-		}
-		h.log.Errorf("error on wms request, status: %s: %v", resp.Status, err)
-		http.Error(w, "Tile error", http.StatusBadGateway)
+	wms, err := do.InvokeNamed[wms.Service](internal.Inj, tile.System)
+	if err != nil {
+		http.Error(w, "System error", http.StatusInternalServerError)
 		return
 	}
-
-	defer resp.Body.Close()
+	rd, err := wms.WMSTile(h.tileToBBox(tile))
+	if err != nil {
+		h.log.Errorf("System error: %v", err)
+		http.Error(w, fmt.Sprintf("System error: %s", err.Error()), http.StatusInternalServerError)
+		return
+	}
+	defer rd.Close()
 
 	w.Header().Set("Content-Type", "image/png")
 	// if cache is inactive simply, copy the content to the requester
 	if !h.cache.IsActive() {
-		io.Copy(w, resp.Body)
+		io.Copy(w, rd)
 		return
 	}
 	// otherwise read the data and write them in parallel to the cache and the requester
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(rd)
 	if err != nil {
 		http.Error(w, "erorr reading data from wms server", http.StatusInternalServerError)
 		return
@@ -105,32 +98,6 @@ func (h *TMSHandler) tileToBBox(tile model.Tile) mercantile.Bbox {
 		Z: tile.Z,
 	}
 	return mercantile.XyBounds(t)
-}
-
-func (h *TMSHandler) buildWMSUrl(tile model.Tile) string {
-	// BBOX berechnen
-	bb := h.tileToBBox(tile)
-	wms := h.wmss[tile.System]
-
-	base, err := url.Parse(wms.URL)
-	if err != nil {
-		panic(err)
-	}
-
-	params := url.Values{}
-	params.Add("request", "GetMap")
-	params.Add("layers", wms.Layers)
-	params.Add("format", wms.Format)
-	params.Add("bbox", fmt.Sprintf("%.9f,%.9f,%.9f,%.9f", bb.Left, bb.Bottom, bb.Right, bb.Top))
-	params.Add("width", "256")
-	params.Add("height", "256")
-	params.Add("srs", "EPSG:3857")
-
-	base.RawQuery = params.Encode()
-	wmsURL := base.String()
-
-	h.log.Debugf("wms url: %s", wmsURL)
-	return wmsURL
 }
 
 func (h *TMSHandler) getRequestParameter(path string) (tile model.Tile, err error) {

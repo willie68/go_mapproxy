@@ -3,8 +3,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/samber/do/v2"
 )
 
 var (
@@ -18,11 +16,6 @@ type Version struct {
 	version string `json:"version"`
 	commit  string `json:"commit"`
 	date    string `json:"date"`
-}
-
-func Init(inj do.Injector) {
-	ver := NewVersion()
-	do.ProvideValue(inj, *ver)
 }
 
 // NewVersion creating a new version

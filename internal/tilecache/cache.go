@@ -18,6 +18,7 @@ import (
 )
 
 type TileCache interface {
+	Has(tile model.Tile) bool
 	Tile(tile model.Tile) (io.Reader, bool)
 	Save(tile model.Tile, data io.Reader) error
 	IsActive() bool
@@ -38,8 +39,8 @@ type Cache struct {
 	flock sync.RWMutex
 }
 
-func New() *Cache {
-	cfg := do.MustInvoke[*Config](nil)
+func Init(inj do.Injector) {
+	cfg := do.MustInvoke[*Config](inj)
 	c := &Cache{
 		log:    logging.New().WithName("tilecache"),
 		path:   cfg.Path,
@@ -47,15 +48,10 @@ func New() *Cache {
 		maxage: cfg.MaxAge,
 		flock:  sync.RWMutex{},
 	}
-	c.init()
-	return c
-}
-
-func (c *Cache) init() {
 	if c.active {
 		c.startCacheCleanupJob()
 	}
-	do.ProvideValue(nil, c)
+	do.ProvideValue(inj, c)
 }
 
 func (c *Cache) startCacheCleanupJob() {
@@ -76,6 +72,19 @@ func (c *Cache) startCacheCleanupJob() {
 
 func (c *Cache) IsActive() bool {
 	return c.active
+}
+
+func (c *Cache) Has(tile model.Tile) bool {
+	if !c.active {
+		return false
+	}
+	fname := c.getFilename(tile)
+	c.flock.RLock()
+	defer c.flock.RUnlock()
+	if _, err := os.Stat(fname); err != nil {
+		return false
+	}
+	return true
 }
 
 func (c *Cache) Tile(tile model.Tile) (io.Reader, bool) {
