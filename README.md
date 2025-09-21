@@ -2,7 +2,9 @@
 
 ## Preface
 
-**go_mapproxy** is a lightweight, high-performance proxy application for Tile Map Services (TMS) and WMS services, written in Go. It is designed to provide fast and efficient access to map tiles from various sources, with optional caching and prefetching capabilities. The application is suitable for both production use and for developers who want to build or optimize their own mapping solutions.
+**go_mapproxy** is a lightweight, high-performance proxy application for Tile Map Services (TMS) and WMS services, written in Go. It is designed to provide fast and efficient access to map tiles from various sources, with optional caching and prefetching capabilities. The application is suitable for both production use and for developers who want to build or optimize their own mapping solutions. 
+
+The original primary purpose was to provide a lightweight service that could be installed on your map client and would proxy TMS requests to WMS. (see https://github.com/willie68/MCSDepthLoggerUI)
 
 ------
 

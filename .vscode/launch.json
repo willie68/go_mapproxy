@@ -38,7 +38,7 @@
                 "--config", 
                 "${workspaceFolder}/configs/config_cache.yaml",
                 "-s",
-                "gebco, gebco2021",
+                "gebco, osm-terrestris",
                 "-z",
                 "4"
             ]

@@ -15,9 +15,11 @@ import (
 type WMSConfigMap map[string]Config
 
 type Config struct {
-	URL    string `yaml:"url"`
-	Layers string `yaml:"layers"`
-	Format string `yaml:"format"`
+	URL     string `yaml:"url"`
+	Layers  string `yaml:"layers"`
+	Format  string `yaml:"format"`
+	Styles  string `yaml:"styles"`
+	Version string `yaml:"version"`
 }
 
 type ServiceFactory struct {
@@ -105,6 +107,12 @@ func (s *Service) buildWMSUrl(bb mercantile.Bbox) string {
 	params.Add("width", "256")
 	params.Add("height", "256")
 	params.Add("srs", "EPSG:3857")
+	if s.config.Version != "" {
+		params.Add("version", s.config.Version)
+	} else {
+		params.Add("version", "1.3.0")
+	}
+	params.Add("styles", s.config.Styles)
 
 	base.RawQuery = params.Encode()
 	wmsURL := base.String()
