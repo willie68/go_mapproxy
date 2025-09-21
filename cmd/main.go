@@ -22,21 +22,35 @@ var (
 	initConfig  bool
 	pfZoom      int
 	pfSystem    string
+	port        int
 )
 
 func init() {
 	flag.BoolVarP(&initConfig, "init", "i", false, "init config, writes out a default config.")
 	flag.BoolVarP(&showVersion, "version", "v", false, "showing the version")
 	flag.StringVarP(&configFile, "config", "c", "config.yaml", "this is the path and filename to the config file")
+	flag.IntVarP(&port, "port", "p", 8580, "overwrite the port of the config")
 	flag.IntVarP(&pfZoom, "zoom", "z", 0, "max zoom for prefetch tiles")
-	flag.StringVarP(&pfSystem, "system", "s", "", "prefetch system, if empty no prefetching will be done")
+	flag.StringVarP(&pfSystem, "system", "s", "", "prefetch system, if empty no prefetching will be done, csv if more than one needed.")
+	flag.Usage = func() {
+		fmt.Printf("Usage of %s:\n", os.Args[0])
+		fmt.Println("more on https://github.com/willie68/go_mapproxy")
+		flag.PrintDefaults()
+		fmt.Println()
+		fmt.Println("examples:")
+		fmt.Println("simply run as proxy: take the default config, add your needed provider and run")
+		fmt.Printf("%s -c config.yaml\n", os.Args[0])
+		fmt.Println("run as proxy with caching: take the default config, add your needed provider,switch caching to true and set a path. Than run")
+		fmt.Printf("%s -c config.yaml\n", os.Args[0])
+		fmt.Println("run as proxy with caching and prefetching zomm 5: take the default config, add your needed provider,switch caching to true and set a path. Than run")
+		fmt.Printf("%s -c config.yaml -s <your system to be cached> -z 4\n", os.Args[0])
+	}
 }
 
 func main() {
 	flag.Parse()
 	if showVersion {
 		fmt.Println(config.NewVersion().String())
-		fmt.Println("more on https://github.com/willie68/go_mapproxy")
 		os.Exit(0)
 	}
 	if initConfig {
@@ -44,7 +58,7 @@ func main() {
 		os.Exit(0)
 	}
 	if !fileutils.FileExists(configFile) {
-		fmt.Fprint(os.Stderr, "no config given or dosn't exists.\r\n")
+		fmt.Fprint(os.Stderr, "no config given or dosn't exists.\r\n\r\n")
 		showUsage()
 		os.Exit(1)
 	}
@@ -52,7 +66,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
+	if port != config.Get().Port {
+		config.Get().Port = port
+	}
 	js, err := config.Get().ToJSON()
 	if err != nil {
 		panic(err)

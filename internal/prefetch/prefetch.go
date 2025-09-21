@@ -2,6 +2,7 @@ package prefetch
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/samber/do/v2"
@@ -15,19 +16,21 @@ import (
 
 var log = logging.New().WithName("prefetch")
 
-func Prefetch(system string, maxzoom int) error {
+func Prefetch(systems string, maxzoom int) error {
 	const numWorkers = 16 // Anzahl paralleler Worker
-
-	wms := do.MustInvokeNamed[wms.Service](internal.Inj, system)
-	cache := do.MustInvokeAs[*tilecache.Cache](internal.Inj)
-
+	syss := SplitMultiValueParam(systems)
+	fmt.Printf("syss: %v", syss)
 	jobs := make(chan model.Tile, 1000)
 	wg := sync.WaitGroup{}
+
+	cache := do.MustInvokeAs[*tilecache.Cache](internal.Inj)
 
 	// Worker starten
 	for range numWorkers {
 		wg.Go(func() {
 			for j := range jobs {
+				wms := do.MustInvokeNamed[wms.Service](internal.Inj, j.System)
+
 				fmt.Printf("caching for z: %d, x: %d, y: %d\r\n", j.Z, j.X, j.Y)
 				rd, err := wms.WMSTile(tileToBBox(j))
 				if err != nil {
@@ -43,19 +46,21 @@ func Prefetch(system string, maxzoom int) error {
 		})
 	}
 
-	// Jobs erzeugen
-	for z := range maxzoom + 1 {
-		rg := 1 << z
-		for x := range rg {
-			for y := range rg {
-				tile := model.Tile{
-					System: system,
-					X:      x,
-					Y:      y,
-					Z:      z,
-				}
-				if !cache.Has(tile) {
-					jobs <- tile
+	for _, sys := range syss {
+		// Jobs erzeugen
+		for z := range maxzoom + 1 {
+			rg := 1 << z
+			for x := range rg {
+				for y := range rg {
+					tile := model.Tile{
+						System: sys,
+						X:      x,
+						Y:      y,
+						Z:      z,
+					}
+					if !cache.Has(tile) {
+						jobs <- tile
+					}
 				}
 			}
 		}
@@ -73,4 +78,10 @@ func tileToBBox(t model.Tile) mercantile.Bbox {
 		Z: t.Z,
 	}
 	return mercantile.XyBounds(ti)
+}
+
+func SplitMultiValueParam(value string) []string {
+	return strings.FieldsFunc(value, func(r rune) bool {
+		return r == ' ' || r == ',' || r == ';'
+	})
 }
