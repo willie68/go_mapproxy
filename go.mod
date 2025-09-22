@@ -7,7 +7,7 @@ require (
 	github.com/samber/do/v2 v2.0.0-rc1
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.10.0
-	github.com/willie68/gowillie68 v0.0.0-20250920091332-f3a2ccca9413
+	github.com/willie68/gowillie68 v0.0.0-20250922125816-400b6b981859
 	go.yaml.in/yaml/v3 v3.0.4
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )

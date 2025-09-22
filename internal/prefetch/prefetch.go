@@ -2,7 +2,6 @@ package prefetch
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/samber/do/v2"
@@ -12,13 +11,14 @@ import (
 	"github.com/willie68/go_mapproxy/internal/model"
 	"github.com/willie68/go_mapproxy/internal/tilecache"
 	"github.com/willie68/go_mapproxy/internal/wms"
+	"github.com/willie68/gowillie68/pkg/extstrgutils"
 )
 
 var log = logging.New().WithName("prefetch")
 
 func Prefetch(systems string, maxzoom int) error {
 	const numWorkers = 16 // Anzahl paralleler Worker
-	syss := SplitMultiValueParam(systems)
+	syss := extstrgutils.SplitMultiValueParam(systems)
 	fmt.Printf("syss: %v", syss)
 	jobs := make(chan model.Tile, 1000)
 	wg := sync.WaitGroup{}
@@ -78,10 +78,4 @@ func tileToBBox(t model.Tile) mercantile.Bbox {
 		Z: t.Z,
 	}
 	return mercantile.XyBounds(ti)
-}
-
-func SplitMultiValueParam(value string) []string {
-	return strings.FieldsFunc(value, func(r rune) bool {
-		return r == ' ' || r == ',' || r == ';'
-	})
 }

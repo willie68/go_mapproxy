@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/willie68/gowillie68/pkg/extstrgutils"
 )
 
 func TestSplit(t *testing.T) {
@@ -51,7 +52,7 @@ func TestSplit(t *testing.T) {
 	}
 
 	for _, td := range tt {
-		sd := SplitMultiValueParam(td.value)
+		sd := extstrgutils.SplitMultiValueParam(td.value)
 		ast.EqualValues(td.split, sd)
 	}
 }
