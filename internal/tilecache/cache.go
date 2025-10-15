@@ -177,3 +177,7 @@ func (c *Cache) GetFileHash(fileStr string) string {
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
+
+func (c *Cache) Close() error {
+	return nil
+}

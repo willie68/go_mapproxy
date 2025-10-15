@@ -66,12 +66,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if port != config.Get().Port {
-		config.Get().Port = port
+	if port != config.Port() {
+		config.SetPort(port)
 	}
-	js, err := config.Get().ToJSON()
-	if err != nil {
-		panic(err)
+	js := config.JSON()
+	if js == "" {
+		panic("error on marshal config to json")
 	}
 	fmt.Printf("Config:\n%s\n", js)
 	log = logging.New().WithName("main")
@@ -93,6 +93,7 @@ func main() {
 		log.Fatalf("error on listen and serv: %v", err)
 	}
 	log.Info("server finished")
+	internal.Stop()
 }
 
 func showUsage() {

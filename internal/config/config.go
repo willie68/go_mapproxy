@@ -22,8 +22,32 @@ var (
 	config Config
 )
 
-func Get() *Config {
-	return &config
+func Logging() *logging.Config {
+	return &config.Logging
+}
+
+func Cache() *tilecache.Config {
+	return &config.Cache
+}
+
+func WMSS() *wms.WMSConfigMap {
+	return &config.WMSS
+}
+
+func SetPort(p int) {
+	config.Port = p
+}
+
+func Port() int {
+	return config.Port
+}
+
+func JSON() string {
+	js, err := config.JSON()
+	if err != nil {
+		return ""
+	}
+	return js
 }
 
 // Load loads the config
@@ -46,15 +70,12 @@ func Load(file string) error {
 
 func Init(inj do.Injector) {
 	do.ProvideValue(inj, &config)
-	do.ProvideValue(inj, &config.Cache)
-	do.ProvideValue(inj, &config.Logging)
-	do.ProvideValue(inj, config.WMSS)
 
 	ver := NewVersion()
 	do.ProvideValue(inj, *ver)
 }
 
-func (c *Config) ToJSON() (string, error) {
+func (c *Config) JSON() (string, error) {
 	data, err := yaml.Marshal(c)
 	if err != nil {
 		return "", fmt.Errorf("can't marshal config to json: %s", err.Error())
