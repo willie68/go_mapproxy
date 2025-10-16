@@ -11,25 +11,32 @@ import (
 	"strings"
 
 	"github.com/samber/do/v2"
-	"github.com/willie68/go_mapproxy/internal"
 	"github.com/willie68/go_mapproxy/internal/logging"
-	"github.com/willie68/go_mapproxy/internal/mercantile"
 	"github.com/willie68/go_mapproxy/internal/model"
-	"github.com/willie68/go_mapproxy/internal/tilecache"
-	"github.com/willie68/go_mapproxy/internal/wms"
 )
+
+type tileCache interface {
+	Tile(tile model.Tile) (io.Reader, bool)
+	Save(tile model.Tile, data io.Reader) error
+	IsActive() bool
+}
+
+type tileserverService interface {
+	HasSystem(name string) bool
+	Tile(tile model.Tile) (io.ReadCloser, error)
+}
 
 type TMSHandler struct {
 	log   *logging.Logger
-	cache tilecache.TileCache
-	wmss  wms.WMSConfigMap
+	cache tileCache
+	tiles tileserverService
 }
 
 func NewTMSHandler(inj do.Injector) *TMSHandler {
 	return &TMSHandler{
 		log:   logging.New().WithName("api"),
-		cache: do.MustInvokeAs[tilecache.TileCache](inj),
-		wmss:  do.MustInvoke[wms.WMSConfigMap](inj),
+		cache: do.MustInvokeAs[tileCache](inj),
+		tiles: do.MustInvokeAs[tileserverService](inj),
 	}
 }
 
@@ -54,12 +61,7 @@ func (h *TMSHandler) Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wms, err := do.InvokeNamed[wms.Service](internal.Inj, tile.System)
-	if err != nil {
-		http.Error(w, "System error", http.StatusInternalServerError)
-		return
-	}
-	rd, err := wms.WMSTile(h.tileToBBox(tile))
+	rd, err := h.tiles.Tile(tile)
 	if err != nil {
 		h.log.Errorf("System error: %v", err)
 		http.Error(w, fmt.Sprintf("System error: %s", err.Error()), http.StatusInternalServerError)
@@ -90,23 +92,13 @@ func (h *TMSHandler) Handler(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, wr)
 }
 
-// Hilfsfunktion für XYZ->BBOX-Konvertierung
-func (h *TMSHandler) tileToBBox(tile model.Tile) mercantile.Bbox {
-	t := mercantile.TileID{
-		X: tile.X,
-		Y: tile.Y,
-		Z: tile.Z,
-	}
-	return mercantile.XyBounds(t)
-}
-
 func (h *TMSHandler) getRequestParameter(path string) (tile model.Tile, err error) {
 	p := strings.Split(path, "/")
 	if len(p) != 6 {
 		return tile, errors.New("Path error")
 	}
 	tile.System = p[1]
-	if _, ok := h.wmss[tile.System]; !ok {
+	if !h.tiles.HasSystem(tile.System) {
 		return tile, errors.New("unknown system")
 	}
 	tile.Z, err = strconv.Atoi(p[3])

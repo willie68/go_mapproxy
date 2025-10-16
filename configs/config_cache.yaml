@@ -7,14 +7,23 @@ cache:
 logging:
   level: debug
 
-wmss: 
+tileservers: 
   gebco:
     url: https://geoserver.openseamap.org/geoserver/gwc/service/wms
+    type: wmss
     layers: gebco2021:gebco_2021
     format: image/png
   osm-terrestris:
     url:  https://ows.terrestris.de/osm/service?
+    type: wmss
     layers: OSM-WMS
     format: image/png
     version: 1.1.0
     styles: 
+  osm:
+    url:  https://tile.openstreetmap.org
+    type: xyz
+    format: image/png
+    headers:
+      Accept: image/png,image/jpg,*/*;q=0.8
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0

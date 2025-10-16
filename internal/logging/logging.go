@@ -60,6 +60,10 @@ type Logger struct {
 // Root to use for all logging
 var Root Logger
 
+type logConfig interface {
+	GetLoggingConfig() Config
+}
+
 func init() {
 	Root.SetLevel(Debug)
 	Root.name = "Root"
@@ -67,7 +71,8 @@ func init() {
 
 // Init initialise the root logger with the given config
 func Init(inj do.Injector) {
-	cfg := do.MustInvoke[*Config](inj)
+	lc := do.MustInvokeAs[logConfig](inj)
+	cfg := lc.GetLoggingConfig()
 	Root.SetLevel(cfg.Level)
 	Root.GelfURL = cfg.Gelfurl
 	Root.GelfPort = cfg.Gelfport

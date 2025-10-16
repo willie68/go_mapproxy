@@ -2,27 +2,20 @@ package tilecache
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"time"
 
+	badger "github.com/dgraph-io/badger/v4"
 	"github.com/samber/do/v2"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/model"
 )
-
-type TileCache interface {
-	Has(tile model.Tile) bool
-	Tile(tile model.Tile) (io.Reader, bool)
-	Save(tile model.Tile, data io.Reader) error
-	IsActive() bool
-}
 
 type Config struct {
 	Path   string `yaml:"path"`
@@ -37,10 +30,20 @@ type Cache struct {
 	maxage int // in hours
 
 	flock sync.RWMutex
+	db    *badger.DB
+}
+
+type tcConfig interface {
+	GetCacheConfig() Config
+}
+
+type dbEntry struct {
+	Hash      string
+	Timestamp time.Time
 }
 
 func Init(inj do.Injector) {
-	cfg := do.MustInvoke[*Config](inj)
+	cfg := do.MustInvokeAs[tcConfig](inj).GetCacheConfig()
 	c := &Cache{
 		log:    logging.New().WithName("tilecache"),
 		path:   cfg.Path,
@@ -52,6 +55,13 @@ func Init(inj do.Injector) {
 		c.startCacheCleanupJob()
 	}
 	do.ProvideValue(inj, c)
+	if c.active {
+		db, err := badger.Open(badger.DefaultOptions(filepath.Join(c.path, "badger")))
+		if err != nil {
+			c.log.Errorf("failed to open badger db: %v", err)
+		}
+		c.db = db
+	}
 }
 
 func (c *Cache) startCacheCleanupJob() {
@@ -78,26 +88,30 @@ func (c *Cache) Has(tile model.Tile) bool {
 	if !c.active {
 		return false
 	}
-	fname := c.getFilename(tile)
-	c.flock.RLock()
-	defer c.flock.RUnlock()
-	if _, err := os.Stat(fname); err != nil {
-		return false
-	}
-	return true
+	// Check if DB has entry
+	return c.DBHas(tile)
 }
 
 func (c *Cache) Tile(tile model.Tile) (io.Reader, bool) {
 	if !c.active {
 		return nil, false
 	}
-	fname := c.getFilename(tile)
-	c.flock.RLock()
-	defer c.flock.RUnlock()
-	if _, err := os.Stat(fname); err != nil {
+	if !c.DBHas(tile) {
 		return nil, false
 	}
-	f, err := os.Open(fname)
+	db, err := c.DBGet(tile)
+	if err != nil || db == nil {
+		return nil, false
+	}
+	_, file := c.getFilename(db.Hash)
+	c.flock.RLock()
+	defer c.flock.RUnlock()
+	if _, err := os.Stat(file); err != nil {
+		// File not found, remove DB entry
+		c.log.Errorf("cache file %s not found", file)
+		return nil, false
+	}
+	f, err := os.Open(file)
 	if err != nil {
 		return nil, false
 	}
@@ -108,25 +122,81 @@ func (c *Cache) Save(tile model.Tile, data io.Reader) error {
 	if !c.active {
 		return nil
 	}
-	fn := c.getFilename(tile)
-	// only cache if the file does not exists
-	c.flock.RLock()
-	if _, err := os.Stat(fn); errors.Is(err, os.ErrNotExist) {
-		if err := os.MkdirAll(filepath.Dir(fn), 0o755); err != nil {
-			return err
-		}
-		c.flock.RUnlock()
-		c.flock.Lock()
-		defer c.flock.Unlock()
-		f, err := os.Create(fn)
+	if c.DBHas(tile) {
+		db, err := c.DBGet(tile)
 		if err != nil {
 			return err
 		}
-		defer f.Close()
-		_, err = io.Copy(f, data)
+		if db != nil {
+			_, file := c.getFilename(db.Hash)
+			if _, err := os.Stat(file); err == nil {
+				// File with same hash already exists
+				return nil
+			}
+		}
+	}
+	// Create temporary file to calculate hash
+	tmpFile, err := os.CreateTemp("", "tile_cache_*.tmp")
+	if err != nil {
 		return err
-	} else {
-		c.flock.RUnlock()
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+
+	// Copy data to temp file and calculate hash
+	h := sha256.New()
+	multiWriter := io.MultiWriter(tmpFile, h)
+	_, err = io.Copy(multiWriter, data)
+	tmpFile.Close()
+	if err != nil {
+		return err
+	}
+
+	// Generate hash-based path
+	hash := hex.EncodeToString(h.Sum(nil))
+	hashDir, hashFile := c.getFilename(hash)
+
+	// Check if hash-based file already exists
+	if _, err := os.Stat(hashFile); err == nil {
+		// File already exists, no need to save again
+		if !c.DBHas(tile) {
+			err = c.DBSet(tile, dbEntry{Hash: hash, Timestamp: time.Now()})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	// Create hash-based directory structure
+	if err := os.MkdirAll(hashDir, 0o755); err != nil {
+		return err
+	}
+
+	// Move temp file to final hash-based location
+	c.flock.Lock()
+	defer c.flock.Unlock()
+	err = os.Rename(tmpPath, hashFile)
+	if err != nil {
+		// Fallback: copy if rename fails (cross-device link)
+		src, err := os.Open(tmpPath)
+		if err != nil {
+			return err
+		}
+		defer src.Close()
+
+		dst, err := os.Create(hashFile)
+		if err != nil {
+			return err
+		}
+		defer dst.Close()
+
+		_, err = io.Copy(dst, src)
+		return err
+	}
+	// Update DB entry
+	err = c.DBSet(tile, dbEntry{Hash: hash, Timestamp: time.Now()})
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -160,10 +230,6 @@ func (c *Cache) deleteFile(path string) {
 	}
 }
 
-func (c *Cache) getFilename(tile model.Tile) string {
-	return filepath.Join(c.path, tile.System, strconv.Itoa(tile.Z), strconv.Itoa(tile.X), fmt.Sprintf("%d.png", tile.Y))
-}
-
 func (c *Cache) GetFileHash(fileStr string) string {
 	f, err := os.Open(fileStr)
 	if err != nil {
@@ -179,5 +245,100 @@ func (c *Cache) GetFileHash(fileStr string) string {
 }
 
 func (c *Cache) Close() error {
+	if c.db != nil {
+		c.db.Close()
+	}
 	return nil
+}
+
+func (c *Cache) DBKey(tile model.Tile) []byte {
+	key := fmt.Sprintf("%s/%d/%d/%d", tile.System, tile.Z, tile.X, tile.Y)
+	return []byte(key)
+}
+
+func (c *Cache) DBSet(tile model.Tile, data dbEntry) error {
+	if c.db == nil {
+		return fmt.Errorf("badger db is not initialized")
+	}
+	val, err := data.Marshal()
+	if err != nil {
+		return err
+	}
+	return c.db.Update(func(txn *badger.Txn) error {
+		return txn.Set(c.DBKey(tile), val)
+	})
+}
+
+func (c *Cache) DBGet(tile model.Tile) (*dbEntry, error) {
+	if c.db == nil {
+		return nil, fmt.Errorf("badger db is not initialized")
+	}
+	var valCopy []byte
+	err := c.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(c.DBKey(tile))
+		if err != nil {
+			return err
+		}
+		val, err := item.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+		valCopy = val
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	var entry dbEntry
+	err = entry.Unmarshal(valCopy)
+	if err != nil {
+		return nil, err
+	}
+	return &entry, nil
+}
+
+func (c *Cache) DBHas(tile model.Tile) bool {
+	if c.db == nil {
+		return false
+	}
+	err := c.db.View(func(txn *badger.Txn) error {
+		_, err := txn.Get(c.DBKey(tile))
+		return err
+	})
+	return err == nil
+}
+
+func (d dbEntry) Marshal() ([]byte, error) {
+	tsBytes, err := d.Timestamp.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	hashBytes := []byte(d.Hash)
+	result := make([]byte, 4+len(hashBytes)+len(tsBytes))
+	binary.LittleEndian.PutUint32(result[0:4], uint32(len(hashBytes)))
+	copy(result[4:4+len(hashBytes)], hashBytes)
+	copy(result[4+len(hashBytes):], tsBytes)
+	return result, nil
+}
+
+func (d *dbEntry) Unmarshal(data []byte) error {
+	if len(data) < 4 {
+		return fmt.Errorf("data too short to unmarshal")
+	}
+	hashLen := binary.LittleEndian.Uint32(data[0:4])
+	if len(data) < int(4+hashLen) {
+		return fmt.Errorf("data too short for hash")
+	}
+	d.Hash = string(data[4 : 4+hashLen])
+	err := d.Timestamp.UnmarshalBinary(data[4+hashLen:])
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Cache) getFilename(hash string) (string, string) {
+	hashDir := filepath.Join(c.path, "hash", hash[:3], hash[3:6])
+	hashFile := filepath.Join(hashDir, hash+".png")
+	return hashDir, hashFile
 }

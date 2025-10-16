@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"io"
 	"sync"
 	"testing"
 
@@ -10,26 +11,31 @@ import (
 	"github.com/willie68/go_mapproxy/internal/mercantile"
 	"github.com/willie68/go_mapproxy/internal/model"
 	"github.com/willie68/go_mapproxy/internal/tilecache"
-	"github.com/willie68/go_mapproxy/internal/wms"
+	"github.com/willie68/go_mapproxy/internal/tileserver"
 )
+
+type tileService interface {
+	WMSTile(bbox mercantile.Bbox) (io.ReadCloser, error)
+}
 
 func TestPreload(t *testing.T) {
 	const numWorkers = 20 // Anzahl paralleler Worker
 	ast := assert.New(t)
 	inj := do.New()
 
-	wm := make(wms.WMSConfigMap)
-	wm["gebco"] = wms.Config{
+	tcm := make(tileserver.ConfigMap)
+	tcm["gebco"] = tileserver.Config{
 		URL:    "https://geoserver.openseamap.org/geoserver/gwc/service/wms",
+		Type:   "wmss",
 		Layers: "gebco2021:gebco_2021",
 		Format: "image/png",
 	}
 
-	do.ProvideValue(inj, wm)
+	do.ProvideValue(inj, tcm)
 
-	wms.Init(inj)
-	wms := do.MustInvokeNamed[wms.Service](inj, "gebco")
-	ast.NotNil(wms)
+	tileserver.Init(inj)
+	ts := do.MustInvokeNamed[tileService](inj, "gebco")
+	ast.NotNil(ts)
 
 	tc := tilecache.Config{
 		Active: true,
@@ -54,7 +60,7 @@ func TestPreload(t *testing.T) {
 		wg.Go(func() {
 			for j := range jobs {
 				fmt.Printf("caching for z: %d, x: %d, y: %d\r\n", j.z, j.x, j.y)
-				rd, err := wms.WMSTile(tileToBBox(j.tile))
+				rd, err := ts.WMSTile(tileToBBox(j.tile))
 				ast.NoError(err)
 				if err == nil {
 					defer rd.Close()

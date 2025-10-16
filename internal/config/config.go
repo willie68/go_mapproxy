@@ -7,41 +7,62 @@ import (
 	"github.com/samber/do/v2"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/tilecache"
-	"github.com/willie68/go_mapproxy/internal/wms"
+	"github.com/willie68/go_mapproxy/internal/tileserver"
 	"go.yaml.in/yaml/v3"
 )
 
-type Config struct {
-	Port    int              `yaml:"port"`
-	WMSS    wms.WMSConfigMap `yaml:"wmss"`
-	Logging logging.Config   `yaml:"logging"`
-	Cache   tilecache.Config `yaml:"cache"`
+type service struct {
+	Port        int                  `yaml:"port"`
+	TileServers tileserver.ConfigMap `yaml:"tileservers"`
+	Logging     logging.Config       `yaml:"logging"`
+	Cache       tilecache.Config     `yaml:"cache"`
+}
+
+type ParameterOption func(*service)
+
+func WithPort(port int) ParameterOption {
+	return func(s *service) {
+		s.SetPort(port)
+	}
 }
 
 var (
-	config Config
+	config service
 )
 
-func Logging() *logging.Config {
-	return &config.Logging
+func (c service) GetLoggingConfig() logging.Config {
+	return c.Logging
 }
 
-func Cache() *tilecache.Config {
-	return &config.Cache
+func (c service) GetCacheConfig() tilecache.Config {
+	return c.Cache
 }
 
-func WMSS() *wms.WMSConfigMap {
-	return &config.WMSS
+func (c service) GetTileserversConfig() tileserver.ConfigMap {
+	return c.TileServers
 }
 
-func SetPort(p int) {
-	config.Port = p
+func (c *service) SetPort(p int) {
+	if p > 0 {
+		c.Port = p
+	}
+}
+
+func (c *service) GetPort() int {
+	return c.Port
+}
+
+func SetParameter(params ...ParameterOption) {
+	for _, p := range params {
+		p(&config)
+	}
 }
 
 func Port() int {
 	return config.Port
 }
 
+// JSON returns the config as json string
 func JSON() string {
 	js, err := config.JSON()
 	if err != nil {
@@ -65,17 +86,20 @@ func Load(file string) error {
 	if err != nil {
 		return fmt.Errorf("can't unmarshal config file: %s", err.Error())
 	}
+	if config.Port <= 0 {
+		config.Port = 8580
+	}
 	return nil
 }
 
 func Init(inj do.Injector) {
-	do.ProvideValue(inj, &config)
+	do.ProvideValue(inj, config)
 
 	ver := NewVersion()
-	do.ProvideValue(inj, *ver)
+	do.ProvideValue(inj, ver)
 }
 
-func (c *Config) JSON() (string, error) {
+func (c *service) JSON() (string, error) {
 	data, err := yaml.Marshal(c)
 	if err != nil {
 		return "", fmt.Errorf("can't marshal config to json: %s", err.Error())

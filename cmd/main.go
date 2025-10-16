@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	flag "github.com/spf13/pflag"
 	"github.com/willie68/go_mapproxy/configs"
@@ -29,7 +31,7 @@ func init() {
 	flag.BoolVarP(&initConfig, "init", "i", false, "init config, writes out a default config.")
 	flag.BoolVarP(&showVersion, "version", "v", false, "showing the version")
 	flag.StringVarP(&configFile, "config", "c", "config.yaml", "this is the path and filename to the config file")
-	flag.IntVarP(&port, "port", "p", 8580, "overwrite the port of the config")
+	flag.IntVarP(&port, "port", "p", 0, "overwrite the port (8580) of the config")
 	flag.IntVarP(&pfZoom, "zoom", "z", 0, "max zoom for prefetch tiles")
 	flag.StringVarP(&pfSystem, "system", "s", "", "prefetch system, if empty no prefetching will be done, csv if more than one needed.")
 	flag.Usage = func() {
@@ -66,9 +68,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if port != config.Port() {
-		config.SetPort(port)
-	}
+
+	config.SetParameter(config.WithPort(port))
 	js := config.JSON()
 	if js == "" {
 		panic("error on marshal config to json")
@@ -86,9 +87,19 @@ func main() {
 			log.Info("prefetch finnished")
 		}()
 	}
+	// Setup graceful shutdown
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-c
+		log.Info("shutting down server...")
+		internal.Stop()
+		os.Exit(0)
+	}()
 
 	http.HandleFunc("/", api.NewTMSHandler(internal.Inj).Handler)
-	err = http.ListenAndServe(fmt.Sprintf(":%d", config.Get().Port), nil)
+	err = http.ListenAndServe(fmt.Sprintf(":%d", config.Port()), nil)
 	if err != nil {
 		log.Fatalf("error on listen and serv: %v", err)
 	}
