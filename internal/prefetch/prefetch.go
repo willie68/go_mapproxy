@@ -14,8 +14,8 @@ import (
 
 var log = logging.New().WithName("prefetch")
 
-type tileService interface {
-	Tile(tile model.Tile) (io.ReadCloser, error)
+type tileServiceFactory interface {
+	FTile(tile model.Tile) (io.ReadCloser, error)
 }
 
 type tileCache interface {
@@ -24,20 +24,20 @@ type tileCache interface {
 
 // Prefetch lädt Kacheln für die angegebenen Systeme und Zoomstufen vor.
 func Prefetch(systems string, maxzoom int) error {
-	const numWorkers = 16 // Anzahl paralleler Worker
+	const numWorkers = 1 // Anzahl paralleler Worker
 	syss := extstrgutils.SplitMultiValueParam(systems)
 	fmt.Printf("syss: %v", syss)
 	jobs := make(chan model.Tile, 1000)
 	wg := sync.WaitGroup{}
 
-	ts := do.MustInvokeAs[tileService](internal.Inj)
+	ts := do.MustInvokeAs[tileServiceFactory](internal.Inj)
 	cache := do.MustInvokeAs[tileCache](internal.Inj)
 
 	// Worker starten
 	for range numWorkers {
 		wg.Go(func() {
 			for j := range jobs {
-				rd, err := ts.Tile(j)
+				rd, err := ts.FTile(j)
 				if err != nil {
 					log.Errorf("error getting tile: %v", err)
 					continue

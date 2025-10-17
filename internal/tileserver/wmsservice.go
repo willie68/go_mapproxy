@@ -85,7 +85,7 @@ func (s *wmsService) tileToBBox(tile model.Tile) mercantile.Bbox {
 	t := mercantile.TileID{
 		X: tile.X,
 		Y: tile.Y,
-		Z: tile.Z,
+		Z: int(tile.Z),
 	}
 	return mercantile.XyBounds(t)
 }

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -15,27 +14,19 @@ import (
 	"github.com/willie68/go_mapproxy/internal/model"
 )
 
-type tileCache interface {
-	Tile(tile model.Tile) (io.Reader, bool)
-	Save(tile model.Tile, data io.Reader) error
-	IsActive() bool
-}
-
 type tileserverService interface {
 	HasSystem(name string) bool
-	Tile(tile model.Tile) (io.ReadCloser, error)
+	FTile(tile model.Tile) (io.ReadCloser, error)
 }
 
 type TMSHandler struct {
 	log   *logging.Logger
-	cache tileCache
 	tiles tileserverService
 }
 
 func NewTMSHandler(inj do.Injector) *TMSHandler {
 	return &TMSHandler{
 		log:   logging.New().WithName("api"),
-		cache: do.MustInvokeAs[tileCache](inj),
 		tiles: do.MustInvokeAs[tileserverService](inj),
 	}
 }
@@ -50,18 +41,7 @@ func (h *TMSHandler) Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// try to get the cached tile
-	if tr, ok := h.cache.Tile(tile); ok {
-		h.log.Debugf("tile found in cache: %s", tile.String())
-		w.Header().Set("Content-Type", "image/png")
-		io.Copy(w, tr)
-		if rc, ok := tr.(io.ReadCloser); ok {
-			rc.Close()
-		}
-		return
-	}
-
-	rd, err := h.tiles.Tile(tile)
+	rd, err := h.tiles.FTile(tile)
 	if err != nil {
 		h.log.Errorf("System error: %v", err)
 		http.Error(w, fmt.Sprintf("System error: %s", err.Error()), http.StatusInternalServerError)
@@ -70,26 +50,7 @@ func (h *TMSHandler) Handler(w http.ResponseWriter, r *http.Request) {
 	defer rd.Close()
 
 	w.Header().Set("Content-Type", "image/png")
-	// if cache is inactive simply, copy the content to the requester
-	if !h.cache.IsActive() {
-		io.Copy(w, rd)
-		return
-	}
-	// otherwise read the data and write them in parallel to the cache and the requester
-	data, err := io.ReadAll(rd)
-	if err != nil {
-		http.Error(w, "erorr reading data from wms server", http.StatusInternalServerError)
-		return
-	}
-
-	wr := bytes.NewReader(data)
-	err = h.cache.Save(tile, wr)
-	if err != nil {
-		http.Error(w, "error writing to the cache", http.StatusInternalServerError)
-		return
-	}
-	wr = bytes.NewReader(data)
-	io.Copy(w, wr)
+	io.Copy(w, rd)
 }
 
 func (h *TMSHandler) getRequestParameter(path string) (tile model.Tile, err error) {

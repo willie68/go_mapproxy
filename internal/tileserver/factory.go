@@ -13,6 +13,7 @@ import (
 type Service interface {
 	Tile(tile model.Tile) (io.ReadCloser, error)
 }
+
 type ConfigMap map[string]Config
 
 type Config struct {
@@ -41,7 +42,7 @@ type tileserverConfig interface {
 
 func Init(inj do.Injector) {
 	sf := serviceFactory{
-		log:      logging.New().WithName("wms"),
+		log:      logging.New().WithName("factory"),
 		configs:  do.MustInvokeAs[tileserverConfig](inj).GetTileserversConfig(),
 		services: make([]string, 0),
 	}

@@ -92,7 +92,7 @@ func (c *Cache) Has(tile model.Tile) bool {
 	return c.DBHas(tile)
 }
 
-func (c *Cache) Tile(tile model.Tile) (io.Reader, bool) {
+func (c *Cache) Tile(tile model.Tile) (io.ReadCloser, bool) {
 	if !c.active {
 		return nil, false
 	}
@@ -191,7 +191,9 @@ func (c *Cache) Save(tile model.Tile, data io.Reader) error {
 		defer dst.Close()
 
 		_, err = io.Copy(dst, src)
-		return err
+		if err != nil {
+			return err
+		}
 	}
 	// Update DB entry
 	err = c.DBSet(tile, dbEntry{Hash: hash, Timestamp: time.Now()})
@@ -252,8 +254,18 @@ func (c *Cache) Close() error {
 }
 
 func (c *Cache) DBKey(tile model.Tile) []byte {
-	key := fmt.Sprintf("%s/%d/%d/%d", tile.System, tile.Z, tile.X, tile.Y)
-	return []byte(key)
+	systemBytes := []byte(tile.System)
+	key := make([]byte, 9+len(systemBytes)) // 1+4+4 for Z,X,Y + system
+
+	// Store Z as uint8, X, Y as binary integers
+	key[0] = uint8(tile.Z)
+	binary.LittleEndian.PutUint16(key[1:3], uint16(tile.X))
+	binary.LittleEndian.PutUint16(key[4:6], uint16(tile.Y))
+
+	// Store system string at the end without length
+	copy(key[9:], systemBytes)
+
+	return key
 }
 
 func (c *Cache) DBSet(tile model.Tile, data dbEntry) error {
@@ -338,7 +350,7 @@ func (d *dbEntry) Unmarshal(data []byte) error {
 }
 
 func (c *Cache) getFilename(hash string) (string, string) {
-	hashDir := filepath.Join(c.path, "hash", hash[:3], hash[3:6])
+	hashDir := filepath.Join(c.path, "tiles", hash[:3], hash[3:6])
 	hashFile := filepath.Join(hashDir, hash+".png")
 	return hashDir, hashFile
 }
