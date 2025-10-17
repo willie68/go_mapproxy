@@ -56,11 +56,12 @@ func Init(inj do.Injector) {
 	}
 	do.ProvideValue(inj, c)
 	if c.active {
-		db, err := badger.Open(badger.DefaultOptions(filepath.Join(c.path, "badger")))
+		db, err := badger.Open(badger.DefaultOptions(filepath.Join(c.path, "badger")).WithValueLogFileSize(100 * 1024 * 1024))
 		if err != nil {
 			c.log.Errorf("failed to open badger db: %v", err)
 		}
 		c.db = db
+		c.startValueLogGCTicker()
 	}
 }
 
@@ -75,6 +76,22 @@ func (c *Cache) startCacheCleanupJob() {
 				c.log.Errorf("cache cleanup error: %v", err)
 			} else {
 				c.log.Infof("cache cleanup completed")
+			}
+		}
+	}()
+}
+
+func (c *Cache) startValueLogGCTicker() {
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			<-ticker.C
+			err := c.db.RunValueLogGC(0.5)
+			if err != nil {
+				c.log.Errorf("value log GC error: %v", err)
+			} else {
+				c.log.Infof("value log GC completed")
 			}
 		}
 	}()
