@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -67,7 +68,7 @@ func Init(inj do.Injector) {
 
 func (c *Cache) startCacheCleanupJob() {
 	go func() {
-		ticker := time.NewTicker(1 * time.Minute)
+		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
 		for {
 			<-ticker.C
@@ -106,7 +107,19 @@ func (c *Cache) Has(tile model.Tile) bool {
 		return false
 	}
 	// Check if DB has entry
-	return c.DBHas(tile)
+	ok := c.DBHas(tile)
+	if !ok {
+		return false
+	}
+	db, err := c.DBGet(tile)
+	if err != nil || db == nil {
+		return false
+	}
+	_, file := c.getFilename(db.Hash)
+	if _, err := os.Stat(file); err != nil {
+		return false
+	}
+	return true
 }
 
 func (c *Cache) Tile(tile model.Tile) (io.ReadCloser, bool) {
@@ -124,7 +137,6 @@ func (c *Cache) Tile(tile model.Tile) (io.ReadCloser, bool) {
 	c.flock.RLock()
 	defer c.flock.RUnlock()
 	if _, err := os.Stat(file); err != nil {
-		// File not found, remove DB entry
 		c.log.Errorf("cache file %s not found", file)
 		return nil, false
 	}
@@ -174,25 +186,33 @@ func (c *Cache) Save(tile model.Tile, data io.Reader) error {
 	hashDir, hashFile := c.getFilename(hash)
 
 	// Check if hash-based file already exists
-	if _, err := os.Stat(hashFile); err == nil {
-		// File already exists, no need to save again
-		if !c.DBHas(tile) {
-			err = c.DBSet(tile, dbEntry{Hash: hash, Timestamp: time.Now()})
-			if err != nil {
-				return err
-			}
+	if _, err := os.Stat(hashFile); errors.Is(err, os.ErrNotExist) {
+		// Create hash-based directory structure
+		if err := os.MkdirAll(hashDir, 0o755); err != nil {
+			return err
 		}
-		return nil
-	}
-	// Create hash-based directory structure
-	if err := os.MkdirAll(hashDir, 0o755); err != nil {
-		return err
+
+		// Move temp file to final hash-based location
+		c.flock.Lock()
+		defer c.flock.Unlock()
+		err = oscrossRename(tmpPath, hashFile)
+		if err != nil {
+			return err
+		}
 	}
 
-	// Move temp file to final hash-based location
-	c.flock.Lock()
-	defer c.flock.Unlock()
-	err = os.Rename(tmpPath, hashFile)
+	// File already exists, no need to save again
+	if !c.DBHas(tile) {
+		err = c.DBSet(tile, dbEntry{Hash: hash, Timestamp: time.Now()})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func oscrossRename(tmpPath string, hashFile string) error {
+	err := os.Rename(tmpPath, hashFile)
 	if err != nil {
 		// Fallback: copy if rename fails (cross-device link)
 		src, err := os.Open(tmpPath)
@@ -211,11 +231,6 @@ func (c *Cache) Save(tile model.Tile, data io.Reader) error {
 		if err != nil {
 			return err
 		}
-	}
-	// Update DB entry
-	err = c.DBSet(tile, dbEntry{Hash: hash, Timestamp: time.Now()})
-	if err != nil {
-		return err
 	}
 	return nil
 }
