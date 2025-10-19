@@ -56,7 +56,7 @@ func Init(inj do.Injector) {
 	}
 	do.ProvideValue(inj, c)
 	if c.active {
-		db, err := badger.Open(badger.DefaultOptions(filepath.Join(c.path, "badger")).WithValueLogFileSize(100 * 1024 * 1024))
+		db, err := badger.Open(badger.DefaultOptions(c.getDBPath()).WithValueLogFileSize(100 * 1024 * 1024))
 		if err != nil {
 			c.log.Errorf("failed to open badger db: %v", err)
 		}
@@ -222,7 +222,7 @@ func (c *Cache) Save(tile model.Tile, data io.Reader) error {
 
 // CleanupOldFiles deletes cache files older than the given duration.
 func (c *Cache) CleanupOldFiles(olderThan time.Duration) error {
-	root := c.path // adjust if your cache path is named differently
+	root := c.getTilesPath()
 	now := time.Now()
 	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -366,8 +366,16 @@ func (d *dbEntry) Unmarshal(data []byte) error {
 	return nil
 }
 
+func (c *Cache) getTilesPath() string {
+	return filepath.Join(c.path, "tiles")
+}
+
+func (c *Cache) getDBPath() string {
+	return filepath.Join(c.path, "badger")
+}
+
 func (c *Cache) getFilename(hash string) (string, string) {
-	hashDir := filepath.Join(c.path, "tiles", hash[:3], hash[3:6])
+	hashDir := filepath.Join(c.getTilesPath(), hash[:3], hash[3:6])
 	hashFile := filepath.Join(hashDir, hash+".png")
 	return hashDir, hashFile
 }
