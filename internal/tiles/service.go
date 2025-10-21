@@ -11,7 +11,8 @@ import (
 )
 
 type tileserverServiceFactory interface {
-	HasSystem(name string) bool
+	HasSystem(systemname string) bool
+	IsCached(systemname string) bool
 }
 
 type tileCache interface {
@@ -24,7 +25,7 @@ type service struct {
 	inj   do.Injector
 	log   *logging.Logger
 	cache tileCache
-	wms   tileserverServiceFactory
+	tssf  tileserverServiceFactory
 }
 
 func Init(inj do.Injector) {
@@ -32,29 +33,35 @@ func Init(inj do.Injector) {
 		inj:   inj,
 		log:   logging.New().WithName("tiles"),
 		cache: do.MustInvokeAs[tileCache](inj),
-		wms:   do.MustInvokeAs[tileserverServiceFactory](inj),
+		tssf:  do.MustInvokeAs[tileserverServiceFactory](inj),
 	})
 }
 
 func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
 	// try to get the cached tile
-	if tr, ok := s.cache.Tile(tile); ok {
-		s.log.Debugf("tile found in cache: %s", tile.String())
-		return tr, nil
-	}
 
 	if !s.HasSystem(tile.System) {
 		return nil, tileserver.ErrNotFound
 	}
+
+	if s.IsCached(tile.System) {
+		if tr, ok := s.cache.Tile(tile); ok {
+			s.log.Debugf("tile found in cache: %s", tile.String())
+			return tr, nil
+		}
+	}
+
 	ts, err := do.InvokeNamed[tileserver.Service](s.inj, tile.System)
 	if err != nil {
 		s.log.Errorf("System error: %v", err)
 		return nil, err
 	}
 
-	// if cache is inactive simply, get the tile from the tileserver
-	if !s.cache.IsActive() {
-		return ts.Tile(tile)
+	if s.IsCached(tile.System) {
+		// if cache is inactive simply, get the tile from the tileserver
+		if !s.cache.IsActive() {
+			return ts.Tile(tile)
+		}
 	}
 
 	rd, err := ts.Tile(tile)
@@ -67,17 +74,23 @@ func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	go func() {
-		rd = io.NopCloser(bytes.NewReader(data))
-		err = s.cache.Save(tile, rd)
-		if err != nil {
-			s.log.Errorf("error saving tile to cache: %v", err)
-		}
-	}()
+	if s.IsCached(tile.System) {
+		go func() {
+			rd = io.NopCloser(bytes.NewReader(data))
+			err = s.cache.Save(tile, rd)
+			if err != nil {
+				s.log.Errorf("error saving tile to cache: %v", err)
+			}
+		}()
+	}
 	rd = io.NopCloser(bytes.NewReader(data))
 	return rd, nil
 }
 
-func (s *service) HasSystem(name string) bool {
-	return s.wms.HasSystem(name)
+func (s *service) HasSystem(systemname string) bool {
+	return s.tssf.HasSystem(systemname)
+}
+
+func (s *service) IsCached(systemname string) bool {
+	return s.tssf.IsCached(systemname)
 }

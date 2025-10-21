@@ -19,6 +19,7 @@ type ConfigMap map[string]Config
 type Config struct {
 	URL     string            `yaml:"url"`
 	Type    string            `yaml:"type"` // wmss, tms, xyz
+	Cached  bool              `yaml:"cached"`
 	Layers  string            `yaml:"layers"`
 	Format  string            `yaml:"format"`
 	Styles  string            `yaml:"styles"`
@@ -47,38 +48,46 @@ func Init(inj do.Injector) {
 		services: make([]string, 0),
 	}
 	do.ProvideValue(inj, &sf)
-	for name, config := range sf.configs {
+	for sname, config := range sf.configs {
 		switch config.Type {
 		case "wmss":
 			var s Service = &wmsService{
-				log:    logging.New().WithName(name),
+				log:    logging.New().WithName(sname),
 				config: config,
 			}
-			do.ProvideNamedValue(inj, name, s)
-			sf.services = append(sf.services, name)
+			do.ProvideNamedValue(inj, sname, s)
+			sf.services = append(sf.services, sname)
 		case "tms":
 			var s Service = &tmsService{
-				log:    logging.New().WithName(name),
+				log:    logging.New().WithName(sname),
 				config: config,
 				isTMS:  true,
 			}
-			do.ProvideNamedValue(inj, name, s)
-			sf.services = append(sf.services, name)
+			do.ProvideNamedValue(inj, sname, s)
+			sf.services = append(sf.services, sname)
 		case "xyz":
 			var s Service = &tmsService{
-				log:    logging.New().WithName(name),
+				log:    logging.New().WithName(sname),
 				config: config,
 				isTMS:  false,
 			}
-			do.ProvideNamedValue(inj, name, s)
-			sf.services = append(sf.services, name)
+			do.ProvideNamedValue(inj, sname, s)
+			sf.services = append(sf.services, sname)
 		default:
 			panic(fmt.Sprintf("unknown service type: %s", config.Type))
 		}
 	}
 }
 
-func (f *serviceFactory) HasSystem(name string) bool {
-	_, ok := f.configs[name]
+func (f *serviceFactory) HasSystem(systemname string) bool {
+	_, ok := f.configs[systemname]
 	return ok
+}
+
+func (f *serviceFactory) IsCached(systemname string) bool {
+	config, ok := f.configs[systemname]
+	if !ok {
+		return false
+	}
+	return config.Cached
 }
