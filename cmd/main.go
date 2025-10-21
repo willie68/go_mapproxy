@@ -6,7 +6,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/go-chi/chi/v5"
 	flag "github.com/spf13/pflag"
 	"github.com/willie68/go_mapproxy/configs"
 	"github.com/willie68/go_mapproxy/internal"
@@ -14,6 +16,7 @@ import (
 	"github.com/willie68/go_mapproxy/internal/config"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/prefetch"
+	"github.com/willie68/go_mapproxy/internal/utils/measurement"
 	"github.com/willie68/gowillie68/pkg/fileutils"
 )
 
@@ -76,7 +79,7 @@ func main() {
 	}
 	fmt.Printf("Config:\n%s\n", js)
 	log = logging.New().WithName("main")
-	log.Info("starting tms service")
+	log.Info("starting tile service")
 
 	internal.Init()
 
@@ -98,8 +101,28 @@ func main() {
 		os.Exit(0)
 	}()
 
-	http.HandleFunc("/", api.NewTMSHandler(internal.Inj).Handler)
-	err = http.ListenAndServe(fmt.Sprintf(":%d", config.Port()), nil)
+	r := chi.NewRouter()
+	r.Mount("/metrics", measurement.Routes(internal.Inj))
+	r.Mount("/tileserver", api.NewTMSHandler(internal.Inj))
+
+	walkFunc := func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
+		log.Infof("api route: %s %s", method, route)
+		return nil
+	}
+
+	if err := chi.Walk(r, walkFunc); err != nil {
+		log.Alertf("could not walk api routes. %v", err)
+	}
+
+	server := &http.Server{
+		Addr:         fmt.Sprintf(":%d", config.Port()),
+		WriteTimeout: time.Second * 15,
+		ReadTimeout:  time.Second * 15,
+		IdleTimeout:  time.Second * 60,
+		Handler:      r,
+	}
+
+	err = server.ListenAndServe()
 	if err != nil {
 		log.Fatalf("error on listen and serv: %v", err)
 	}

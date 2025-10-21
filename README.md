@@ -39,11 +39,17 @@ Start the proxy with a configuration file:
 
 To prefetch tiles up to a certain zoom level for a specific system:
 
-`gomapproxy -c config.yaml -s <systemname> -z 4`
+`gomapproxy -c config.yaml -s <systemnames as csv> -z 4`
+
+### Check funktionality
+if you wnat to try, that your proxy is working simply load a tile. The url for such a request is 
+`http://[your hostname]:[port]/[provider]/[z]/[x]/[y].png` 
+
+e.g. `http://localhost:8580/osm/xyz/4/8/5.png`
 
 ### Command Line Options
 
-- `-c, --config`: Path to the configuration file (default: [config.yaml](vscode-file://vscode-app/c:/Users/wklaa/AppData/Local/Programs/Microsoft VS Code/resources/app/out/vs/code/electron-browser/workbench/workbench.html))
+- `-c, --config`: Path to the configuration file (default: config.yaml)
 - `-p, --port`: Overwrite the port specified in the config
 - `-i, --init`: Write out a default config file
 - `-v, --version`: Show the current version
@@ -73,8 +79,6 @@ tileservers:
 
 ```
 
-
-
 ### Prefetch for Multiple Systems
 
 `gomapproxy -c config.yaml -s "gebco,osm" -z 5`
@@ -84,7 +88,7 @@ tileservers:
 ## Further Information
 
 - Full documentation and examples:
-  [https://github.com/willie68/go_mapproxy](vscode-file://vscode-app/c:/Users/wklaa/AppData/Local/Programs/Microsoft VS Code/resources/app/out/vs/code/electron-browser/workbench/workbench.html)
+  [Project Readme](https://github.com/willie68/go_mapproxy)
 - For questions or support, please open an issue on GitHub.
 
 ------
@@ -114,6 +118,35 @@ This application is cross-platform and can be run on any system with a Go runtim
 - only 256x256px tiles possible
 - only srs=EPSG:3857 is possible
 - no server description is proxied
+
+## Caching
+
+For performance boost you can enable caching of tiles. In the config enable the cache. 
+
+```yaml
+caching:
+  active: true
+  path: ./tilecache
+  maxage: 2160 # in hours, 90 days = 2160
+```
+
+path: path where the gomapproxy can store tiles. (Keep in mind how much storage you may need.)
+maxage: setting the maximal age of tiles in hours. If a tile is older, the background process will automatically delete this tile. 
+
+Second for every tileserver you must activate the cache option
+
+```yaml
+tileservers:
+ osm:
+  url:  https://tile.openstreetmap.org
+  type: xyz
+  format: image/png
+  cached: true
+```
+
+ cached: set this property to true and all tiles requested from this server will stored into the cache.
+
+The cache will store the tiles file by a double subfolder structure based on the file hash. And than the tile metadata will be stored in a key/value store database, key is the metadata (system, x,y,z), value the hash of the tile. As the hash is unique for the tiles, tiles with identically content will have the same hash. And will be stored only once. The database is stored in the subdirectory badger (as it's a badgerdb) and the tiles will be stored in a sub folder tiles. (Single-Instance-Storage)
 
 ## A word on prefetching of tiles
 

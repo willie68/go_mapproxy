@@ -2,12 +2,14 @@ package tiles
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 
 	"github.com/samber/do/v2"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/model"
 	"github.com/willie68/go_mapproxy/internal/tileserver"
+	"github.com/willie68/go_mapproxy/internal/utils/measurement"
 )
 
 type tileserverServiceFactory interface {
@@ -22,18 +24,20 @@ type tileCache interface {
 }
 
 type service struct {
-	inj   do.Injector
-	log   *logging.Logger
-	cache tileCache
-	tssf  tileserverServiceFactory
+	inj     do.Injector
+	log     *logging.Logger
+	cache   tileCache
+	tssf    tileserverServiceFactory
+	metrics *measurement.Service
 }
 
 func Init(inj do.Injector) {
 	do.ProvideValue(inj, &service{
-		inj:   inj,
-		log:   logging.New().WithName("tiles"),
-		cache: do.MustInvokeAs[tileCache](inj),
-		tssf:  do.MustInvokeAs[tileserverServiceFactory](inj),
+		inj:     inj,
+		log:     logging.New().WithName("tiles"),
+		cache:   do.MustInvokeAs[tileCache](inj),
+		tssf:    do.MustInvokeAs[tileserverServiceFactory](inj),
+		metrics: do.MustInvoke[*measurement.Service](inj),
 	})
 }
 
@@ -45,10 +49,13 @@ func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
 	}
 
 	if s.IsCached(tile.System) {
+		td := s.metrics.Start("getTileFromCache")
 		if tr, ok := s.cache.Tile(tile); ok {
+			td.Stop()
 			s.log.Debugf("tile found in cache: %s", tile.String())
 			return tr, nil
 		}
+		td.Stop()
 	}
 
 	ts, err := do.InvokeNamed[tileserver.Service](s.inj, tile.System)
@@ -57,17 +64,21 @@ func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
 		return nil, err
 	}
 
-	if s.IsCached(tile.System) {
-		// if cache is inactive simply, get the tile from the tileserver
-		if !s.cache.IsActive() {
-			return ts.Tile(tile)
-		}
-	}
-
+	td := s.metrics.Start("getTileFromTileserver")
+	tsd := s.metrics.Start(fmt.Sprintf("getTileFromTileserver:%s", tile.System))
 	rd, err := ts.Tile(tile)
 	if err != nil {
 		s.log.Errorf("error getting tile from tileserver: %v", err)
 		return nil, err
+	}
+	tsd.Stop()
+	td.Stop()
+
+	if s.IsCached(tile.System) {
+		// if cache is inactive simply, get the tile from the tileserver
+		if !s.cache.IsActive() {
+			return rd, nil
+		}
 	}
 
 	data, err := io.ReadAll(rd)
@@ -77,6 +88,8 @@ func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
 	if s.IsCached(tile.System) {
 		go func() {
 			rd = io.NopCloser(bytes.NewReader(data))
+			td := s.metrics.Start("saveTileToCache")
+			defer td.Stop()
 			err = s.cache.Save(tile, rd)
 			if err != nil {
 				s.log.Errorf("error saving tile to cache: %v", err)

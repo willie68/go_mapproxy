@@ -10,6 +10,7 @@ import (
 	"github.com/willie68/go_mapproxy/internal/tilecache"
 	"github.com/willie68/go_mapproxy/internal/tiles"
 	"github.com/willie68/go_mapproxy/internal/tileserver"
+	"github.com/willie68/go_mapproxy/internal/utils/measurement"
 )
 
 var Inj do.Injector
@@ -19,6 +20,10 @@ func Init() {
 
 	config.Init(Inj)
 	logging.Init(Inj)
+
+	metrics := measurement.New(true)
+	do.ProvideValue(Inj, metrics)
+
 	tilecache.Init(Inj)
 	tileserver.Init(Inj)
 	tiles.Init(Inj)

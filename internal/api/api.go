@@ -9,9 +9,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/samber/do/v2"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/model"
+	"github.com/willie68/go_mapproxy/internal/utils/measurement"
 )
 
 type tileserverService interface {
@@ -20,61 +22,70 @@ type tileserverService interface {
 }
 
 type TMSHandler struct {
-	log   *logging.Logger
-	tiles tileserverService
+	log     *logging.Logger
+	tiles   tileserverService
+	metrics *measurement.Service
 }
 
-func NewTMSHandler(inj do.Injector) *TMSHandler {
-	return &TMSHandler{
-		log:   logging.New().WithName("api"),
-		tiles: do.MustInvokeAs[tileserverService](inj),
+func NewTMSHandler(inj do.Injector) *chi.Mux {
+	th := &TMSHandler{
+		log:     logging.New().WithName("api"),
+		tiles:   do.MustInvokeAs[tileserverService](inj),
+		metrics: do.MustInvokeAs[*measurement.Service](inj),
 	}
+	router := chi.NewRouter()
+	router.Get("/{system}/xyz/{z}/{x}/{y}.png", th.GetSystemHandler(inj))
+	return router
 }
 
-func (h *TMSHandler) Handler(w http.ResponseWriter, r *http.Request) {
-	// URL: /{system}/tms/{z}/{x}/{y}.png
-	path := r.URL.Path
-	h.log.Infof("path: %s", path)
-	tile, err := h.getRequestParameter(path)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Path error: %s", err.Error()), http.StatusBadRequest)
-		return
-	}
+func (h *TMSHandler) GetSystemHandler(inj do.Injector) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		td := h.metrics.Start("getTile")
+		defer td.Stop()
 
-	rd, err := h.tiles.FTile(tile)
-	if err != nil {
-		h.log.Errorf("System error: %v", err)
-		http.Error(w, fmt.Sprintf("System error: %s", err.Error()), http.StatusInternalServerError)
-		return
-	}
-	defer rd.Close()
+		// URL: /tileserver/{system}/xyz/{z}/{x}/{y}.png
+		h.log.Infof("path: %s", r.URL.Path)
+		tile, err := h.getRequestParameter(r)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Path error: %s", err.Error()), http.StatusBadRequest)
+			return
+		}
 
-	w.Header().Set("Content-Type", "image/png")
-	io.Copy(w, rd)
+		rd, err := h.tiles.FTile(tile)
+		if err != nil {
+			h.log.Errorf("System error: %v", err)
+			http.Error(w, fmt.Sprintf("System error: %s", err.Error()), http.StatusInternalServerError)
+			return
+		}
+		defer rd.Close()
+
+		w.Header().Set("Content-Type", "image/png")
+		io.Copy(w, rd)
+	})
 }
 
-func (h *TMSHandler) getRequestParameter(path string) (tile model.Tile, err error) {
-	p := strings.Split(path, "/")
-	if len(p) != 6 {
-		return tile, errors.New("Path error")
-	}
-	tile.System = p[1]
-	if !h.tiles.HasSystem(tile.System) {
-		return tile, errors.New("unknown system")
-	}
-	tile.Z, err = strconv.Atoi(p[3])
+func (h *TMSHandler) getRequestParameter(r *http.Request) (tile model.Tile, err error) {
+	tile.System = chi.URLParam(r, "system")
+	zs := chi.URLParam(r, "z")
+	xs := chi.URLParam(r, "x")
+	ys := chi.URLParam(r, "y")
+
+	tile.Z, err = strconv.Atoi(zs)
 	if err != nil {
-		return tile, errors.New("error in zoom")
+		return tile, errors.New("error in zoom level")
 	}
-	tile.X, err = strconv.Atoi(p[4])
+	tile.X, err = strconv.Atoi(xs)
 	if err != nil {
 		return tile, errors.New("error in x axis")
 	}
-	fn := filepath.Base(p[5])
-	ys := strings.TrimSuffix(fn, filepath.Ext(fn))
+	ys = strings.TrimSuffix(ys, filepath.Ext(ys))
 	tile.Y, err = strconv.Atoi(ys)
 	if err != nil {
 		return tile, errors.New("error in y axis")
+	}
+
+	if !h.tiles.HasSystem(tile.System) {
+		return tile, errors.New("unknown system")
 	}
 	if !h.isValidTMSCoord(tile.X, tile.Y, tile.Z) {
 		return tile, errors.New("invalid tile coordinates")
