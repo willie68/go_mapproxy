@@ -2,9 +2,9 @@
 
 ## Preface
 
-**go_mapproxy** is a lightweight, high-performance proxy application for Tile Map Services (TMS) and WMS services, written in Go. It is designed to provide fast and efficient access to map tiles from various sources, with optional caching and prefetching capabilities. The application is suitable for both production use and for developers who want to build or optimize their own mapping solutions. 
+**go_mapproxy** is a lightweight, high-performance proxy application for Slippy Map, Tile Map Services (TMS) and WMS services, written in Go. It is designed to provide fast and efficient access to map tiles from various sources, with optional caching and prefetching capabilities. The application is suitable for both production use and for developers who want to build or optimize their own mapping solutions. 
 
-The original primary purpose was to provide a lightweight service that could be installed on your map client and would proxy TMS requests to WMS. (see https://github.com/willie68/MCSDepthLoggerUI)
+The original primary purpose was to provide a lightweight service that could be installed on your map client and would proxy XYZ requests to WMS. (see https://github.com/willie68/MCSDepthLoggerUI)
 
 ------
 
@@ -12,7 +12,7 @@ The original primary purpose was to provide a lightweight service that could be 
 
 The main goals of **go_mapproxy** are:
 
-- **Proxy Functionality:** Forward TMS requests to a WMS map server.
+- **Proxy Functionality:** Forward XYZ requests to a XYZ, TMS or WMS map server.
 - **Caching:** Optionally cache tiles to speed up access and reduce server load.
 - **Prefetching:** Preload tiles for defined zoom levels and map systems.
 - **Simple Configuration:** Use a clear YAML configuration file for quick and easy setup.
@@ -61,11 +61,16 @@ port: 8580
 caching:
   active: true
   path: ./tilecache
-providers:
+  maxage: 2160 # in hours, 90 days = 2160
+
+tileservers:
   gebco:
-    url: "https://geoserver.openseamap.org/geoserver/gwc/service/wms"
-    layers: "gebco2021:gebco_2021"
-    format: "image/png"
+    url: https://geoserver.openseamap.org/geoserver/gwc/service/wms
+    type: wmss
+    layers: gebco2021:gebco_2021
+    format: image/png
+    cached: true
+
 ```
 
 
@@ -88,11 +93,22 @@ providers:
 This application is cross-platform and can be run on any system with a Go runtime.
 
 ## How this will work
-- take a tms request
-- convert xyz to wms bounding box
-- do the wms request on the desired server, server configurable in a config 
-- proxy the answered png to the requesting client
-- if configured, a simple file cache is applied
+- take a xyz request
+- check system
+- if system cached, try cache -> ok, return tile
+- -> not ok, check system type 
+  - wms
+    - convert xyz to wms bounding box
+    - do the wms request on the desired server, server configurable in a config 
+    - proxy the answered png to the requesting client
+  - tms
+    - invert y coordinate
+    - do the tms request on the desired server, server configurable in a config 
+    - proxy the answered png to the requesting client
+  - xyz
+    - do the tms request on the desired server, server configurable in a config 
+    - proxy the answered png to the requesting client
+  - if configured and system cachable, cache the tile
 
 ## Restrictions
 - only 256x256px tiles possible
@@ -103,6 +119,6 @@ This application is cross-platform and can be run on any system with a Go runtim
 
 You can prefetch single/multiple system with the `system` and `zoom` parameter. All tiles of the the systems from 0 to zoom will be prefetched. (At this time no prefetch bonding boxes are configurable) Be aware you need the space for that. Prefechting with level 8 is round about 1GB. (depends on the wms provider) Level 9 ~ 5GB... (And it will take some time)
 
-example: `gomapproxy .c config.yaml -s gebco -z 9`
+example: `gomapproxy -c config.yaml -s gebco -z 9`
 
 This will prefetch all tiles from the server with the alias gebco for zoom levels 0 to 9.
