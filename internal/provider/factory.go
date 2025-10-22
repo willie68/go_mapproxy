@@ -25,6 +25,7 @@ type Config struct {
 	Styles   string            `yaml:"styles"`
 	Version  string            `yaml:"version"`
 	Headers  map[string]string `yaml:"headers"`
+	Path     string            `yaml:"path"` // for file based providers
 }
 
 type pFactory struct {
@@ -71,6 +72,10 @@ func Init(inj do.Injector) {
 				config: config,
 				isTMS:  false,
 			}
+			do.ProvideNamedValue(inj, sname, s)
+			sf.services = append(sf.services, sname)
+		case "mbtiles":
+			var s Service = NewMBTilesProvider(config)
 			do.ProvideNamedValue(inj, sname, s)
 			sf.services = append(sf.services, sname)
 		default:
