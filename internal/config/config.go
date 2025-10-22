@@ -6,16 +6,16 @@ import (
 
 	"github.com/samber/do/v2"
 	"github.com/willie68/go_mapproxy/internal/logging"
+	"github.com/willie68/go_mapproxy/internal/provider"
 	"github.com/willie68/go_mapproxy/internal/tilecache"
-	"github.com/willie68/go_mapproxy/internal/tileserver"
 	"go.yaml.in/yaml/v3"
 )
 
 type service struct {
-	Port        int                  `yaml:"port"`
-	TileServers tileserver.ConfigMap `yaml:"tileservers"`
-	Logging     logging.Config       `yaml:"logging"`
-	Cache       tilecache.Config     `yaml:"cache"`
+	Port      int                `yaml:"port"`
+	Providers provider.ConfigMap `yaml:"provider"`
+	Logging   logging.Config     `yaml:"logging"`
+	Cache     tilecache.Config   `yaml:"cache"`
 }
 
 type ParameterOption func(*service)
@@ -38,8 +38,8 @@ func (c service) GetCacheConfig() tilecache.Config {
 	return c.Cache
 }
 
-func (c service) GetTileserversConfig() tileserver.ConfigMap {
-	return c.TileServers
+func (c service) GetProviderConfig() provider.ConfigMap {
+	return c.Providers
 }
 
 func (c *service) SetPort(p int) {

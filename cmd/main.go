@@ -48,7 +48,7 @@ func init() {
 		fmt.Println("run as proxy with caching: take the default config, add your needed provider,switch caching to true and set a path. Than run")
 		fmt.Printf("%s -c config.yaml\n", os.Args[0])
 		fmt.Println("run as proxy with caching and prefetching zomm 5: take the default config, add your needed provider,switch caching to true and set a path. Than run")
-		fmt.Printf("%s -c config.yaml -s <your system to be cached> -z 4\n", os.Args[0])
+		fmt.Printf("%s -c config.yaml -s <your provider to be cached> -z 4\n", os.Args[0])
 	}
 }
 
@@ -85,7 +85,7 @@ func main() {
 
 	if pfSystem != "" && pfZoom > 0 {
 		go func() {
-			log.Infof("starting prefetch for system %s with zoom %d", pfSystem, pfZoom)
+			log.Infof("starting prefetch for provider %s with zoom %d", pfSystem, pfZoom)
 			prefetch.Prefetch(pfSystem, pfZoom)
 			log.Info("prefetch finnished")
 		}()

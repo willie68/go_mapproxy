@@ -7,9 +7,9 @@ import (
 	"github.com/willie68/go_mapproxy/internal/config"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/model"
+	"github.com/willie68/go_mapproxy/internal/provider"
 	"github.com/willie68/go_mapproxy/internal/tilecache"
 	"github.com/willie68/go_mapproxy/internal/tiles"
-	"github.com/willie68/go_mapproxy/internal/tileserver"
 	"github.com/willie68/go_mapproxy/internal/utils/measurement"
 )
 
@@ -25,7 +25,7 @@ func Init() {
 	do.ProvideValue(Inj, metrics)
 
 	tilecache.Init(Inj)
-	tileserver.Init(Inj)
+	provider.Init(Inj)
 	tiles.Init(Inj)
 }
 

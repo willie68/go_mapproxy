@@ -1,4 +1,4 @@
-package tileserver
+package provider
 
 import (
 	"errors"
@@ -17,17 +17,17 @@ type Service interface {
 type ConfigMap map[string]Config
 
 type Config struct {
-	URL     string            `yaml:"url"`
-	Type    string            `yaml:"type"` // wmss, tms, xyz
-	Cached  bool              `yaml:"cached"`
-	Layers  string            `yaml:"layers"`
-	Format  string            `yaml:"format"`
-	Styles  string            `yaml:"styles"`
-	Version string            `yaml:"version"`
-	Headers map[string]string `yaml:"headers"`
+	URL      string            `yaml:"url"`
+	Type     string            `yaml:"type"` // wmss, tms, xyz
+	NoCached bool              `yaml:"nocache"`
+	Layers   string            `yaml:"layers"`
+	Format   string            `yaml:"format"`
+	Styles   string            `yaml:"styles"`
+	Version  string            `yaml:"version"`
+	Headers  map[string]string `yaml:"headers"`
 }
 
-type serviceFactory struct {
+type pFactory struct {
 	log      *logging.Logger
 	configs  ConfigMap
 	services []string
@@ -37,28 +37,28 @@ var (
 	ErrNotFound = errors.New("service not found")
 )
 
-type tileserverConfig interface {
-	GetTileserversConfig() ConfigMap
+type providerConfig interface {
+	GetProviderConfig() ConfigMap
 }
 
 func Init(inj do.Injector) {
-	sf := serviceFactory{
+	sf := pFactory{
 		log:      logging.New().WithName("factory"),
-		configs:  do.MustInvokeAs[tileserverConfig](inj).GetTileserversConfig(),
+		configs:  do.MustInvokeAs[providerConfig](inj).GetProviderConfig(),
 		services: make([]string, 0),
 	}
 	do.ProvideValue(inj, &sf)
 	for sname, config := range sf.configs {
 		switch config.Type {
 		case "wmss":
-			var s Service = &wmsService{
+			var s Service = &wmsProvider{
 				log:    logging.New().WithName(sname),
 				config: config,
 			}
 			do.ProvideNamedValue(inj, sname, s)
 			sf.services = append(sf.services, sname)
 		case "tms":
-			var s Service = &tmsService{
+			var s Service = &tmsProvider{
 				log:    logging.New().WithName(sname),
 				config: config,
 				isTMS:  true,
@@ -66,7 +66,7 @@ func Init(inj do.Injector) {
 			do.ProvideNamedValue(inj, sname, s)
 			sf.services = append(sf.services, sname)
 		case "xyz":
-			var s Service = &tmsService{
+			var s Service = &tmsProvider{
 				log:    logging.New().WithName(sname),
 				config: config,
 				isTMS:  false,
@@ -79,15 +79,15 @@ func Init(inj do.Injector) {
 	}
 }
 
-func (f *serviceFactory) HasSystem(systemname string) bool {
-	_, ok := f.configs[systemname]
+func (f *pFactory) HasProvider(providerName string) bool {
+	_, ok := f.configs[providerName]
 	return ok
 }
 
-func (f *serviceFactory) IsCached(systemname string) bool {
-	config, ok := f.configs[systemname]
+func (f *pFactory) IsCached(providerName string) bool {
+	config, ok := f.configs[providerName]
 	if !ok {
 		return false
 	}
-	return config.Cached
+	return !config.NoCached
 }

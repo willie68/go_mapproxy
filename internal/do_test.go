@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/willie68/go_mapproxy/internal/mercantile"
 	"github.com/willie68/go_mapproxy/internal/model"
+	"github.com/willie68/go_mapproxy/internal/provider"
 	"github.com/willie68/go_mapproxy/internal/tilecache"
-	"github.com/willie68/go_mapproxy/internal/tileserver"
 )
 
 type tileService interface {
@@ -23,8 +23,8 @@ func TestPreload(t *testing.T) {
 	ast := assert.New(t)
 	inj := do.New()
 
-	tcm := make(tileserver.ConfigMap)
-	tcm["gebco"] = tileserver.Config{
+	tcm := make(provider.ConfigMap)
+	tcm["gebco"] = provider.Config{
 		URL:    "https://geoserver.openseamap.org/geoserver/gwc/service/wms",
 		Type:   "wmss",
 		Layers: "gebco2021:gebco_2021",
@@ -33,7 +33,7 @@ func TestPreload(t *testing.T) {
 
 	do.ProvideValue(inj, tcm)
 
-	tileserver.Init(inj)
+	provider.Init(inj)
 	ts := do.MustInvokeNamed[tileService](inj, "gebco")
 	ast.NotNil(ts)
 
@@ -77,10 +77,10 @@ func TestPreload(t *testing.T) {
 		for x := range rg {
 			for y := range rg {
 				tile := model.Tile{
-					System: "gebco",
-					X:      x,
-					Y:      y,
-					Z:      z,
+					Provider: "gebco",
+					X:        x,
+					Y:        y,
+					Z:        z,
 				}
 				jobs <- job{tile: tile, z: z, x: x, y: y}
 			}

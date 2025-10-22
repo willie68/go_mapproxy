@@ -1,4 +1,4 @@
-package tileserver
+package provider
 
 import (
 	"errors"
@@ -10,14 +10,14 @@ import (
 	"github.com/willie68/go_mapproxy/internal/model"
 )
 
-type tmsService struct {
+type tmsProvider struct {
 	log    *logging.Logger
 	config Config
 	isTMS  bool
 	cl     *http.Client
 }
 
-func (s *tmsService) Tile(tile model.Tile) (io.ReadCloser, error) {
+func (s *tmsProvider) Tile(tile model.Tile) (io.ReadCloser, error) {
 	tmsURL := s.buildTMSUrl(tile)
 	s.log.Debugf("Requesting TMS tile from %s", tmsURL)
 	if s.cl == nil {
@@ -50,7 +50,7 @@ func (s *tmsService) Tile(tile model.Tile) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-func (s *tmsService) buildTMSUrl(tile model.Tile) string {
+func (s *tmsProvider) buildTMSUrl(tile model.Tile) string {
 	if s.isTMS {
 		// TMS Y coordinate conversion
 		ymax := 1 << tile.Z

@@ -1,4 +1,4 @@
-package tileserver
+package provider
 
 import (
 	"errors"
@@ -12,13 +12,13 @@ import (
 	"github.com/willie68/go_mapproxy/internal/model"
 )
 
-type wmsService struct {
+type wmsProvider struct {
 	log    *logging.Logger
 	config Config
 	cl     *http.Client
 }
 
-func (s *wmsService) Tile(tile model.Tile) (io.ReadCloser, error) {
+func (s *wmsProvider) Tile(tile model.Tile) (io.ReadCloser, error) {
 	wmsURL := s.buildWMSUrl(s.tileToBBox(tile))
 	s.log.Debugf("Requesting WMS tile from %s", wmsURL)
 
@@ -51,7 +51,7 @@ func (s *wmsService) Tile(tile model.Tile) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-func (s *wmsService) buildWMSUrl(bb mercantile.Bbox) string {
+func (s *wmsProvider) buildWMSUrl(bb mercantile.Bbox) string {
 
 	base, err := url.Parse(s.config.URL)
 	if err != nil {
@@ -81,7 +81,7 @@ func (s *wmsService) buildWMSUrl(bb mercantile.Bbox) string {
 }
 
 // Hilfsfunktion für XYZ->BBOX-Konvertierung
-func (s *wmsService) tileToBBox(tile model.Tile) mercantile.Bbox {
+func (s *wmsProvider) tileToBBox(tile model.Tile) mercantile.Bbox {
 	t := mercantile.TileID{
 		X: tile.X,
 		Y: tile.Y,

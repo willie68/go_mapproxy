@@ -286,16 +286,16 @@ func (c *Cache) Close() error {
 }
 
 func (c *Cache) DBKey(tile model.Tile) []byte {
-	systemBytes := []byte(tile.System)
-	key := make([]byte, 9+len(systemBytes)) // 1+4+4 for Z,X,Y + system
+	providerBytes := []byte(tile.Provider)
+	key := make([]byte, 9+len(providerBytes)) // 1+4+4 for Z,X,Y + provider
 
 	// Store Z as uint8, X, Y as binary integers
 	key[0] = uint8(tile.Z)
 	binary.LittleEndian.PutUint16(key[1:3], uint16(tile.X))
 	binary.LittleEndian.PutUint16(key[4:6], uint16(tile.Y))
 
-	// Store system string at the end without length
-	copy(key[9:], systemBytes)
+	// Store provider string at the end without length
+	copy(key[9:], providerBytes)
 
 	return key
 }

@@ -8,13 +8,13 @@ import (
 	"github.com/samber/do/v2"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/model"
-	"github.com/willie68/go_mapproxy/internal/tileserver"
+	"github.com/willie68/go_mapproxy/internal/provider"
 	"github.com/willie68/go_mapproxy/internal/utils/measurement"
 )
 
-type tileserverServiceFactory interface {
-	HasSystem(systemname string) bool
-	IsCached(systemname string) bool
+type providerFactory interface {
+	HasProvider(providerName string) bool
+	IsCached(providerName string) bool
 }
 
 type tileCache interface {
@@ -27,7 +27,7 @@ type service struct {
 	inj     do.Injector
 	log     *logging.Logger
 	cache   tileCache
-	tssf    tileserverServiceFactory
+	tssf    providerFactory
 	metrics *measurement.Service
 }
 
@@ -36,7 +36,7 @@ func Init(inj do.Injector) {
 		inj:     inj,
 		log:     logging.New().WithName("tiles"),
 		cache:   do.MustInvokeAs[tileCache](inj),
-		tssf:    do.MustInvokeAs[tileserverServiceFactory](inj),
+		tssf:    do.MustInvokeAs[providerFactory](inj),
 		metrics: do.MustInvoke[*measurement.Service](inj),
 	})
 }
@@ -44,11 +44,11 @@ func Init(inj do.Injector) {
 func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
 	// try to get the cached tile
 
-	if !s.HasSystem(tile.System) {
-		return nil, tileserver.ErrNotFound
+	if !s.HasProvider(tile.Provider) {
+		return nil, provider.ErrNotFound
 	}
 
-	if s.IsCached(tile.System) {
+	if s.IsCached(tile.Provider) {
 		td := s.metrics.Start("getTileFromCache")
 		if tr, ok := s.cache.Tile(tile); ok {
 			td.Stop()
@@ -58,14 +58,14 @@ func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
 		td.Stop()
 	}
 
-	ts, err := do.InvokeNamed[tileserver.Service](s.inj, tile.System)
+	ts, err := do.InvokeNamed[provider.Service](s.inj, tile.Provider)
 	if err != nil {
 		s.log.Errorf("System error: %v", err)
 		return nil, err
 	}
 
-	td := s.metrics.Start("getTileFromTileserver")
-	tsd := s.metrics.Start(fmt.Sprintf("getTileFromTileserver:%s", tile.System))
+	td := s.metrics.Start("getTileFromProvider")
+	tsd := s.metrics.Start(fmt.Sprintf("getTileFromProvider:%s", tile.Provider))
 	rd, err := ts.Tile(tile)
 	if err != nil {
 		s.log.Errorf("error getting tile from tileserver: %v", err)
@@ -74,7 +74,7 @@ func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
 	tsd.Stop()
 	td.Stop()
 
-	if s.IsCached(tile.System) {
+	if s.IsCached(tile.Provider) {
 		// if cache is inactive simply, get the tile from the tileserver
 		if !s.cache.IsActive() {
 			return rd, nil
@@ -85,7 +85,7 @@ func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	if s.IsCached(tile.System) {
+	if s.IsCached(tile.Provider) {
 		go func() {
 			rd = io.NopCloser(bytes.NewReader(data))
 			td := s.metrics.Start("saveTileToCache")
@@ -100,10 +100,10 @@ func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
 	return rd, nil
 }
 
-func (s *service) HasSystem(systemname string) bool {
-	return s.tssf.HasSystem(systemname)
+func (s *service) HasProvider(providerName string) bool {
+	return s.tssf.HasProvider(providerName)
 }
 
-func (s *service) IsCached(systemname string) bool {
-	return s.tssf.IsCached(systemname)
+func (s *service) IsCached(providerName string) bool {
+	return s.tssf.IsCached(providerName)
 }

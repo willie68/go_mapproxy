@@ -16,25 +16,25 @@ import (
 	"github.com/willie68/go_mapproxy/internal/utils/measurement"
 )
 
-type tileserverService interface {
-	HasSystem(name string) bool
+type providerService interface {
+	HasProvider(providerName string) bool
 	FTile(tile model.Tile) (io.ReadCloser, error)
 }
 
 type TMSHandler struct {
 	log     *logging.Logger
-	tiles   tileserverService
+	tiles   providerService
 	metrics *measurement.Service
 }
 
 func NewTMSHandler(inj do.Injector) *chi.Mux {
 	th := &TMSHandler{
 		log:     logging.New().WithName("api"),
-		tiles:   do.MustInvokeAs[tileserverService](inj),
+		tiles:   do.MustInvokeAs[providerService](inj),
 		metrics: do.MustInvokeAs[*measurement.Service](inj),
 	}
 	router := chi.NewRouter()
-	router.Get("/{system}/xyz/{z}/{x}/{y}.png", th.GetSystemHandler(inj))
+	router.Get("/{provider}/xyz/{z}/{x}/{y}.png", th.GetSystemHandler(inj))
 	return router
 }
 
@@ -43,7 +43,7 @@ func (h *TMSHandler) GetSystemHandler(inj do.Injector) http.HandlerFunc {
 		td := h.metrics.Start("getTile")
 		defer td.Stop()
 
-		// URL: /tileserver/{system}/xyz/{z}/{x}/{y}.png
+		// URL: /tileserver/{provider}/xyz/{z}/{x}/{y}.png
 		h.log.Infof("path: %s", r.URL.Path)
 		tile, err := h.getRequestParameter(r)
 		if err != nil {
@@ -65,7 +65,7 @@ func (h *TMSHandler) GetSystemHandler(inj do.Injector) http.HandlerFunc {
 }
 
 func (h *TMSHandler) getRequestParameter(r *http.Request) (tile model.Tile, err error) {
-	tile.System = chi.URLParam(r, "system")
+	tile.Provider = chi.URLParam(r, "provider")
 	zs := chi.URLParam(r, "z")
 	xs := chi.URLParam(r, "x")
 	ys := chi.URLParam(r, "y")
@@ -84,8 +84,8 @@ func (h *TMSHandler) getRequestParameter(r *http.Request) (tile model.Tile, err 
 		return tile, errors.New("error in y axis")
 	}
 
-	if !h.tiles.HasSystem(tile.System) {
-		return tile, errors.New("unknown system")
+	if !h.tiles.HasProvider(tile.Provider) {
+		return tile, errors.New("unknown provider")
 	}
 	if !h.isValidTMSCoord(tile.X, tile.Y, tile.Z) {
 		return tile, errors.New("invalid tile coordinates")
