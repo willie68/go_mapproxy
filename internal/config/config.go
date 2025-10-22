@@ -6,6 +6,7 @@ import (
 
 	"github.com/samber/do/v2"
 	"github.com/willie68/go_mapproxy/internal/logging"
+	"github.com/willie68/go_mapproxy/internal/prefetch"
 	"github.com/willie68/go_mapproxy/internal/provider"
 	"github.com/willie68/go_mapproxy/internal/tilecache"
 	"go.yaml.in/yaml/v3"
@@ -16,6 +17,7 @@ type service struct {
 	Providers provider.ConfigMap `yaml:"provider"`
 	Logging   logging.Config     `yaml:"logging"`
 	Cache     tilecache.Config   `yaml:"cache"`
+	Prefetch  prefetch.Config    `yaml:"prefetch"`
 }
 
 type ParameterOption func(*service)
@@ -40,6 +42,10 @@ func (c service) GetCacheConfig() tilecache.Config {
 
 func (c service) GetProviderConfig() provider.ConfigMap {
 	return c.Providers
+}
+
+func (c service) GetPrefetchConfig() prefetch.Config {
+	return c.Prefetch
 }
 
 func (c *service) SetPort(p int) {

@@ -6,13 +6,20 @@ import (
 	"sync"
 
 	"github.com/samber/do/v2"
-	"github.com/willie68/go_mapproxy/internal"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/model"
 	"github.com/willie68/gowillie68/pkg/extstrgutils"
 )
 
 var log = logging.New().WithName("prefetch")
+
+type Config struct {
+	Workers int `yaml:"workers"` // number of parallel workers
+}
+
+type pfConfig interface {
+	GetPrefetchConfig() Config
+}
 
 type providerFactory interface {
 	FTile(tile model.Tile) (io.ReadCloser, error)
@@ -22,19 +29,29 @@ type tileCache interface {
 	Has(tile model.Tile) bool
 }
 
+var myinj do.Injector
+
+func Init(inj do.Injector) {
+	myinj = inj
+}
+
 // Prefetch lädt Kacheln für die angegebenen Systeme und Zoomstufen vor.
 func Prefetch(providers string, maxzoom int) error {
-	const numWorkers = 1 // Anzahl paralleler Worker
+	cfg := do.MustInvokeAs[pfConfig](myinj).GetPrefetchConfig()
+	workers := 10
+	if cfg.Workers > 0 {
+		workers = cfg.Workers
+	}
 	syss := extstrgutils.SplitMultiValueParam(providers)
 	fmt.Printf("syss: %v", syss)
 	jobs := make(chan model.Tile, 1000)
 	wg := sync.WaitGroup{}
 
-	ts := do.MustInvokeAs[providerFactory](internal.Inj)
-	cache := do.MustInvokeAs[tileCache](internal.Inj)
+	ts := do.MustInvokeAs[providerFactory](myinj)
+	cache := do.MustInvokeAs[tileCache](myinj)
 
 	// Worker starten
-	for range numWorkers {
+	for range workers {
 		wg.Go(func() {
 			for j := range jobs {
 				rd, err := ts.FTile(j)

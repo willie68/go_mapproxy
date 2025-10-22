@@ -179,7 +179,7 @@ provider:
 
 ## A word on prefetching of tiles
 
-You can prefetch single/multiple provider with the `system` and `zoom` parameter. All tiles of the the providers from 0 to zoom will be prefetched. (At this time no prefetch bonding boxes are configurable) Be aware you need the space for that. Prefechting with level 8 is round about 1GB. (depends on the wms provider) Level 9 ~ 5GB... (And it will take some time)
+You can prefetch single/multiple provider with the `system` and `zoom` parameter. All tiles of the the selected provider from 0 to zoom will be prefetched. (At this time no prefetch bonding boxes are configurable) Be aware you need the space for that. Prefechting with level 8 is round about 1GB. (depends on the wms provider) Level 9 ~ 5GB... (And it will take some time)
 
 example: `gomapproxy -c config.yaml -s gebco -z 9`
 

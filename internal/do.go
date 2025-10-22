@@ -7,6 +7,7 @@ import (
 	"github.com/willie68/go_mapproxy/internal/config"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/model"
+	"github.com/willie68/go_mapproxy/internal/prefetch"
 	"github.com/willie68/go_mapproxy/internal/provider"
 	"github.com/willie68/go_mapproxy/internal/tilecache"
 	"github.com/willie68/go_mapproxy/internal/tiles"
@@ -23,6 +24,8 @@ func Init() {
 
 	metrics := measurement.New(true)
 	do.ProvideValue(Inj, metrics)
+
+	prefetch.Init(Inj)
 
 	tilecache.Init(Inj)
 	provider.Init(Inj)
