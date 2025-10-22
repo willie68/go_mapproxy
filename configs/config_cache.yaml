@@ -34,3 +34,4 @@ provider:
     type: mbtiles
     path: ./testdata/OSM-OpenCPN2-Adria.mbtiles
     nocache: true
+    fallback: osm

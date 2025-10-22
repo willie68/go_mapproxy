@@ -26,12 +26,14 @@ type Config struct {
 	Version  string            `yaml:"version"`
 	Headers  map[string]string `yaml:"headers"`
 	Path     string            `yaml:"path"` // for file based providers
+	Fallback string            `yaml:"fallback"`
 }
 
 type pFactory struct {
 	log      *logging.Logger
 	configs  ConfigMap
 	services []string
+	inj      do.Injector
 }
 
 var (
@@ -47,6 +49,7 @@ func Init(inj do.Injector) {
 		log:      logging.New().WithName("factory"),
 		configs:  do.MustInvokeAs[providerConfig](inj).GetProviderConfig(),
 		services: make([]string, 0),
+		inj:      inj,
 	}
 	do.ProvideValue(inj, &sf)
 	for sname, config := range sf.configs {
@@ -75,7 +78,7 @@ func Init(inj do.Injector) {
 			do.ProvideNamedValue(inj, sname, s)
 			sf.services = append(sf.services, sname)
 		case "mbtiles":
-			var s Service = NewMBTilesProvider(config)
+			var s Service = NewMBTilesProvider(config, inj)
 			do.ProvideNamedValue(inj, sname, s)
 			sf.services = append(sf.services, sname)
 		default:
