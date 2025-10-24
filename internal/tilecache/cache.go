@@ -136,8 +136,13 @@ func (c *Cache) Tile(tile model.Tile) (io.ReadCloser, bool) {
 	_, file := c.getFilename(db.Hash)
 	c.flock.RLock()
 	defer c.flock.RUnlock()
-	if _, err := os.Stat(file); err != nil {
+	fi, err := os.Stat(file)
+	if err != nil {
 		c.log.Errorf("cache file %s not found", file)
+		return nil, false
+	}
+	if fi.Size() < 100 {
+		c.log.Errorf("cache file %s is too small", file)
 		return nil, false
 	}
 	f, err := os.Open(file)
@@ -151,12 +156,14 @@ func (c *Cache) Save(tile model.Tile, data io.Reader) error {
 	if !c.active {
 		return nil
 	}
+	orgHash := ""
 	if c.DBHas(tile) {
 		db, err := c.DBGet(tile)
 		if err != nil {
 			return err
 		}
 		if db != nil {
+			orgHash = db.Hash
 			_, file := c.getFilename(db.Hash)
 			if _, err := os.Stat(file); err == nil {
 				// File with same hash already exists
@@ -202,7 +209,7 @@ func (c *Cache) Save(tile model.Tile, data io.Reader) error {
 	}
 
 	// File already exists, no need to save again
-	if !c.DBHas(tile) {
+	if !c.DBHas(tile) || (hash != orgHash) {
 		err = c.DBSet(tile, dbEntry{Hash: hash, Timestamp: time.Now()})
 		if err != nil {
 			return err

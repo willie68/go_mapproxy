@@ -22,6 +22,7 @@ type pfConfig interface {
 }
 
 type providerFactory interface {
+	IsPrefetchable(providerName string) bool
 	FTile(tile model.Tile) (io.ReadCloser, error)
 }
 
@@ -54,13 +55,15 @@ func Prefetch(providers string, maxzoom int) error {
 	for range workers {
 		wg.Go(func() {
 			for j := range jobs {
-				rd, err := ts.FTile(j)
-				if err != nil {
-					log.Errorf("error getting tile: %v", err)
-					continue
+				if ts.IsPrefetchable(j.Provider) {
+					rd, err := ts.FTile(j)
+					if err != nil {
+						log.Errorf("error getting tile: %v", err)
+						continue
+					}
+					defer rd.Close()
+					log.Infof("fetched tile: %v", j)
 				}
-				defer rd.Close()
-				log.Infof("fetched tile: %v", j)
 			}
 		})
 	}

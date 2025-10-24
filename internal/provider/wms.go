@@ -30,6 +30,7 @@ func (s *wmsProvider) Tile(tile model.Tile) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 
+	setDefaultHeaders(req)
 	for key, value := range s.config.Headers {
 		req.Header.Set(key, value)
 	}

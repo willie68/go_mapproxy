@@ -4,8 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"strings"
 
 	"github.com/samber/do/v2"
+	"github.com/willie68/go_mapproxy/configs"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/model"
 )
@@ -17,16 +20,17 @@ type Service interface {
 type ConfigMap map[string]Config
 
 type Config struct {
-	URL      string            `yaml:"url"`
-	Type     string            `yaml:"type"` // wmss, tms, xyz
-	NoCached bool              `yaml:"nocache"`
-	Layers   string            `yaml:"layers"`
-	Format   string            `yaml:"format"`
-	Styles   string            `yaml:"styles"`
-	Version  string            `yaml:"version"`
-	Headers  map[string]string `yaml:"headers"`
-	Path     string            `yaml:"path"` // for file based providers
-	Fallback string            `yaml:"fallback"`
+	URL        string            `yaml:"url"`
+	Type       string            `yaml:"type"` // wmss, tms, xyz
+	NoCached   bool              `yaml:"nocache"`
+	Layers     string            `yaml:"layers"`
+	Format     string            `yaml:"format"`
+	Styles     string            `yaml:"styles"`
+	Version    string            `yaml:"version"`
+	Headers    map[string]string `yaml:"headers"`
+	Path       string            `yaml:"path"` // for file based providers
+	Fallback   string            `yaml:"fallback"`
+	NoPrefetch bool              `yaml:"noprefetch"` // disable any prefetching of tiles
 }
 
 type pFactory struct {
@@ -98,4 +102,23 @@ func (f *pFactory) IsCached(providerName string) bool {
 		return false
 	}
 	return !config.NoCached
+}
+
+func (f *pFactory) IsPrefetchable(providerName string) bool {
+	config, ok := f.configs[providerName]
+	if !ok {
+		return false
+	}
+	bl := configs.PrefetchBlacklist()
+	for _, b := range bl {
+		if strings.Contains(strings.ToLower(config.URL), strings.ToLower(b)) {
+			return false
+		}
+	}
+	return !config.NoPrefetch
+}
+
+func setDefaultHeaders(req *http.Request) {
+	req.Header.Set("User-Agent", "go_mapproxy/0.1")
+	req.Header.Set("Accept", "*/*")
 }

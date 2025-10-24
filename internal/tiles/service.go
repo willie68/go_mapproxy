@@ -15,6 +15,7 @@ import (
 type providerFactory interface {
 	HasProvider(providerName string) bool
 	IsCached(providerName string) bool
+	IsPrefetchable(providerName string) bool
 }
 
 type tileCache interface {
@@ -106,4 +107,8 @@ func (s *service) HasProvider(providerName string) bool {
 
 func (s *service) IsCached(providerName string) bool {
 	return s.tssf.IsCached(providerName)
+}
+
+func (s *service) IsPrefetchable(providerName string) bool {
+	return s.cache.IsActive() && s.tssf.IsCached(providerName) && s.tssf.IsPrefetchable(providerName)
 }

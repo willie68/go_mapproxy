@@ -21,12 +21,14 @@ provider:
     format: image/png
     version: 1.1.0
     nocache: true
+    noprefetch: true
     styles: 
-  osm:
-    url:  https://tile.openstreetmap.org
+  osmde:
+    url:  https://tile.openstreetmap.de
     type: xyz
     format: image/png
     nocache: false
+    noprefetch: true
     headers:
       Accept: image/png,image/jpg,*/*;q=0.8
       User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0
@@ -34,4 +36,4 @@ provider:
     type: mbtiles
     path: ./testdata/OSM-OpenCPN2-Adria.mbtiles
     nocache: true
-    fallback: osm
+    fallback: osmde

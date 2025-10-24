@@ -38,9 +38,9 @@
                 "--config", 
                 "${workspaceFolder}/configs/config_cache.yaml",
                 "-s",
-                "gebco, osm",
+                "gebco, osmde",
                 "-z",
-                "4"
+                "5"
             ]
         }
     ]
