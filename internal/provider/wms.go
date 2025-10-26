@@ -7,15 +7,22 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/samber/do/v2"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/mercantile"
 	"github.com/willie68/go_mapproxy/internal/model"
 )
 
 type wmsProvider struct {
+	name   string
 	log    *logging.Logger
 	config Config
 	cl     *http.Client
+}
+
+func (s *wmsProvider) PostInit(inj do.Injector) error {
+	s.log.Infof("WMS provider '%s' initialized with URL: %s", s.name, s.config.URL)
+	return nil
 }
 
 func (s *wmsProvider) Tile(tile model.Tile) (io.ReadCloser, error) {

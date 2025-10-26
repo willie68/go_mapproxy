@@ -2,16 +2,23 @@ package provider
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 
 	"github.com/i0tool5/mbtiles-go"
 	"github.com/samber/do/v2"
 
+	"github.com/willie68/go_mapproxy/internal/assets"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/mercantile"
 	"github.com/willie68/go_mapproxy/internal/model"
 )
+
+type providerService interface {
+	HasProvider(providerName string) bool
+	FTile(tile model.Tile) (io.ReadCloser, error)
+}
 
 type metadata struct {
 	Name    string
@@ -22,15 +29,18 @@ type metadata struct {
 }
 
 type mbtilesProvider struct {
-	log  *logging.Logger
-	db   *mbtiles.MBtiles
-	fb   string
-	meta metadata
-	inj  do.Injector
+	name   string
+	log    *logging.Logger
+	db     *mbtiles.MBtiles
+	fbname string
+	fb     bool
+	fbts   providerService
+	meta   metadata
+	inj    do.Injector
 }
 
-func NewMBTilesProvider(config Config, inj do.Injector) *mbtilesProvider {
-	log := logging.New().WithName("mbtiles")
+func NewMBTilesProvider(name string, config Config, inj do.Injector) *mbtilesProvider {
+	log := logging.New().WithName(fmt.Sprintf("mbtiles: %s", name))
 	db, err := mbtiles.Open(config.Path)
 	if err != nil {
 		log.Errorf("failed to open mbtiles database: %v", err)
@@ -43,46 +53,73 @@ func NewMBTilesProvider(config Config, inj do.Injector) *mbtilesProvider {
 	}
 	log.Infof("mbtiles metadata: %+v", meta)
 	mbt := &mbtilesProvider{
-		log: log,
-		db:  db,
-		fb:  config.Fallback,
-		inj: inj,
+		name:   name,
+		log:    log,
+		db:     db,
+		inj:    inj,
+		fbname: config.Fallback,
+		fb:     false,
 	}
 	mbt.parseMetadata(meta)
 	return mbt
 }
 
+func (s *mbtilesProvider) PostInit(inj do.Injector) error {
+	if s.fbname != "" {
+		fbts := do.MustInvokeAs[providerService](inj)
+
+		if !fbts.HasProvider(s.fbname) {
+			msg := fmt.Sprintf("fallback provider '%s' not found", s.fbname)
+			s.log.Errorf(msg)
+			return errors.New(msg)
+		}
+		s.fbts = fbts
+		s.fb = true
+		s.log.Infof("fallback service '%s' configured", s.fbname)
+	}
+	return nil
+}
+
 func (s *mbtilesProvider) Tile(tile model.Tile) (io.ReadCloser, error) {
 	var data []byte
-	if tile.Z == 0 {
-		return s.fallback(tile)
-	}
 	ymax := 1 << tile.Z
 	y := ymax - tile.Y - 1
 	if tile.Z < s.meta.Minzoom || tile.Z > s.meta.Maxzoom {
-		return nil, fmt.Errorf("zoom level %d out of bounds (%d - %d)", tile.Z, s.meta.Minzoom, s.meta.Maxzoom)
+		if s.fb {
+			return s.fallback(tile)
+		}
+		s.log.Errorf("zoom level %d out of bounds (%d - %d)", tile.Z, s.meta.Minzoom, s.meta.Maxzoom)
+		return io.NopCloser(io.Reader(bytes.NewReader(assets.EmptyPNG))), nil
+
 	}
 	if s.meta.BBox != nil {
 		tbox := mercantile.ULBounds(mercantile.TileID{X: tile.X, Y: tile.Y, Z: tile.Z})
 		if tbox.Left > s.meta.BBox.Right || tbox.Right < s.meta.BBox.Left || tbox.Top < s.meta.BBox.Bottom || tbox.Bottom > s.meta.BBox.Top {
-			return nil, fmt.Errorf("tile %d/%d/%d out of bounds", tile.Z, tile.X, tile.Y)
+			if s.fb {
+				return s.fallback(tile)
+			}
+			s.log.Errorf("tile %d/%d/%d out of bounds", tile.Z, tile.X, tile.Y)
+			return io.NopCloser(io.Reader(bytes.NewReader(assets.EmptyPNG))), nil
 		}
 	}
 	err := s.db.ReadTile(int64(tile.Z), int64(tile.X), int64(y), &data)
 	//err := s.db.ReadTile(int64(0), int64(0), int64(0), &data)
 	if err != nil || len(data) == 0 {
-		return nil, fmt.Errorf("failed to read tile: %v", err)
+		if s.fb {
+			return s.fallback(tile)
+		}
+		s.log.Errorf("failed to read tile: %v", err)
+		return io.NopCloser(io.Reader(bytes.NewReader(assets.EmptyPNG))), nil
 	}
 	return io.NopCloser(io.Reader(bytes.NewReader(data))), nil
 }
 
 func (s *mbtilesProvider) fallback(tile model.Tile) (io.ReadCloser, error) {
-	ts, err := do.InvokeNamed[Service](s.inj, s.fb)
-	if err != nil {
-		s.log.Errorf("System error: %v", err)
-		return nil, err
+	if !s.fb {
+		return nil, fmt.Errorf("no fallback defined for tile %d/%d/%d", tile.Z, tile.X, tile.Y)
 	}
-	return ts.Tile(tile)
+	tile.Provider = s.fbname
+	return s.fbts.FTile(tile)
 }
 
 func (s *mbtilesProvider) parseMetadata(meta map[string]any) {

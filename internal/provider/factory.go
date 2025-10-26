@@ -14,6 +14,7 @@ import (
 )
 
 type Service interface {
+	PostInit(inj do.Injector) error
 	Tile(tile model.Tile) (io.ReadCloser, error)
 }
 
@@ -60,14 +61,16 @@ func Init(inj do.Injector) {
 		switch config.Type {
 		case "wmss":
 			var s Service = &wmsProvider{
-				log:    logging.New().WithName(sname),
+				name:   sname,
+				log:    logging.New().WithName(fmt.Sprintf("wms: %s", sname)),
 				config: config,
 			}
 			do.ProvideNamedValue(inj, sname, s)
 			sf.services = append(sf.services, sname)
 		case "tms":
 			var s Service = &tmsProvider{
-				log:    logging.New().WithName(sname),
+				name:   sname,
+				log:    logging.New().WithName(fmt.Sprintf("tms: %s", sname)),
 				config: config,
 				isTMS:  true,
 			}
@@ -75,20 +78,36 @@ func Init(inj do.Injector) {
 			sf.services = append(sf.services, sname)
 		case "xyz":
 			var s Service = &tmsProvider{
-				log:    logging.New().WithName(sname),
+				name:   sname,
+				log:    logging.New().WithName(fmt.Sprintf("xyz: %s", sname)),
 				config: config,
 				isTMS:  false,
 			}
 			do.ProvideNamedValue(inj, sname, s)
 			sf.services = append(sf.services, sname)
 		case "mbtiles":
-			var s Service = NewMBTilesProvider(config, inj)
+			var s Service = NewMBTilesProvider(sname, config, inj)
 			do.ProvideNamedValue(inj, sname, s)
 			sf.services = append(sf.services, sname)
 		default:
 			panic(fmt.Sprintf("unknown service type: %s", config.Type))
 		}
 	}
+}
+
+func (sf *pFactory) FPostInit(inj do.Injector) error {
+	for _, s := range sf.services {
+		sf.log.Infof("registered service: %s", s)
+		ts, err := do.InvokeNamed[Service](inj, s)
+		if err != nil {
+			sf.log.Errorf("failed to invoke service '%s': %v", s, err)
+		}
+		err = ts.PostInit(inj)
+		if err != nil {
+			sf.log.Errorf("failed to post init service '%s': %v", s, err)
+		}
+	}
+	return nil
 }
 
 func (f *pFactory) HasProvider(providerName string) bool {
