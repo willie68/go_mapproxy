@@ -16,10 +16,6 @@ import (
 
 var Inj do.Injector
 
-type postInit interface {
-	FPostInit(inj do.Injector) error
-}
-
 func Init() {
 	Inj = do.New()
 
@@ -34,9 +30,6 @@ func Init() {
 	provider.Init(Inj)
 	tilecache.Init(Inj)
 	tiles.Init(Inj)
-
-	pi := do.MustInvokeAs[postInit](Inj)
-	pi.FPostInit(Inj)
 }
 
 type tileCache interface {

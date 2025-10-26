@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/samber/do/v2"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/model"
 )
@@ -17,11 +16,6 @@ type tmsProvider struct {
 	config Config
 	isTMS  bool
 	cl     *http.Client
-}
-
-func (s *tmsProvider) PostInit(inj do.Injector) error {
-	s.log.Infof("TMS provider '%s' initialized with URL: %s", s.name, s.config.URL)
-	return nil
 }
 
 func (s *tmsProvider) Tile(tile model.Tile) (io.ReadCloser, error) {

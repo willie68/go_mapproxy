@@ -1,6 +1,14 @@
 package assets
 
-import _ "embed"
+import (
+	"bytes"
+	_ "embed"
+	"io"
+)
 
 //go:embed empty.png
-var EmptyPNG []byte
+var emptyPNG []byte
+
+func EmptyPNG() io.ReadCloser {
+	return io.NopCloser(io.Reader(bytes.NewReader(emptyPNG)))
+}

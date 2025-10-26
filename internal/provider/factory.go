@@ -14,7 +14,6 @@ import (
 )
 
 type Service interface {
-	PostInit(inj do.Injector) error
 	Tile(tile model.Tile) (io.ReadCloser, error)
 }
 
@@ -93,21 +92,6 @@ func Init(inj do.Injector) {
 			panic(fmt.Sprintf("unknown service type: %s", config.Type))
 		}
 	}
-}
-
-func (sf *pFactory) FPostInit(inj do.Injector) error {
-	for _, s := range sf.services {
-		sf.log.Infof("registered service: %s", s)
-		ts, err := do.InvokeNamed[Service](inj, s)
-		if err != nil {
-			sf.log.Errorf("failed to invoke service '%s': %v", s, err)
-		}
-		err = ts.PostInit(inj)
-		if err != nil {
-			sf.log.Errorf("failed to post init service '%s': %v", s, err)
-		}
-	}
-	return nil
 }
 
 func (f *pFactory) HasProvider(providerName string) bool {
