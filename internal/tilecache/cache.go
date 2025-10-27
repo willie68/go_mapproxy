@@ -359,6 +359,20 @@ func (c *Cache) DBHas(tile model.Tile) bool {
 	return err == nil
 }
 
+func (c *Cache) getTilesPath() string {
+	return filepath.Join(c.path, "tiles")
+}
+
+func (c *Cache) getDBPath() string {
+	return filepath.Join(c.path, "badger")
+}
+
+func (c *Cache) getFilename(hash string) (string, string) {
+	hashDir := filepath.Join(c.getTilesPath(), hash[:3], hash[3:6])
+	hashFile := filepath.Join(hashDir, hash+".png")
+	return hashDir, hashFile
+}
+
 func (d dbEntry) Marshal() ([]byte, error) {
 	tsBytes, err := d.Timestamp.MarshalBinary()
 	if err != nil {
@@ -386,18 +400,4 @@ func (d *dbEntry) Unmarshal(data []byte) error {
 		return err
 	}
 	return nil
-}
-
-func (c *Cache) getTilesPath() string {
-	return filepath.Join(c.path, "tiles")
-}
-
-func (c *Cache) getDBPath() string {
-	return filepath.Join(c.path, "badger")
-}
-
-func (c *Cache) getFilename(hash string) (string, string) {
-	hashDir := filepath.Join(c.getTilesPath(), hash[:3], hash[3:6])
-	hashFile := filepath.Join(hashDir, hash+".png")
-	return hashDir, hashFile
 }
