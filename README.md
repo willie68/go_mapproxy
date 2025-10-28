@@ -2,7 +2,7 @@
 
 ## Preface
 
-**go_mapproxy** is a lightweight, high-performance proxy application for Slippy Map (xyz), Tile Map Services (TMS) and WMS services, written in Go. It is designed to provide fast and efficient access to map tiles from various sources, with optional caching and prefetching capabilities. The application is suitable for both production use and for developers who want to build or optimize their own mapping solutions. 
+**go_mapproxy** is a lightweight, high-performance proxy application for Slippy Map (xyz), Tile Map Services (TMS), WMS services and MBTiles files, written in Go. It is designed to provide fast and efficient access to map tiles from various sources, with optional caching and prefetching capabilities. The application is suitable for both production use and for developers who want to build or optimize their own mapping solutions. 
 
 The original primary purpose was to provide a lightweight service that could be installed on your map client and would proxy XYZ requests to WMS. (see https://github.com/willie68/MCSDepthLoggerUI)
 
@@ -12,7 +12,7 @@ The original primary purpose was to provide a lightweight service that could be 
 
 The main goals of **go_mapproxy** are:
 
-- **Proxy Functionality:** Forward XYZ requests to a XYZ, TMS or WMS map server.
+- **Proxy Functionality:** Forward XYZ requests to a XYZ, TMS or WMS map server. Or use a MBTiles File.
 - **Caching:** Optionally cache tiles to speed up access and reduce server load.
 - **Prefetching:** Preload tiles for defined zoom levels and map providers.
 - **Simple Configuration:** Use a clear YAML configuration file for quick and easy setup.
@@ -35,7 +35,7 @@ Start the proxy with a configuration file:
    caching:
      active: true
      path: ./tilecache
-     maxage: 2160 # in hours, 90 days = 2160
+     maxage: 168 # in hours, 7d * 24h = 168h
    ```
 
 2. Start the application:
@@ -119,6 +119,10 @@ This application is cross-platform and can be run on any system with a Go runtim
   - xyz
     - do the tms request on the desired server, server configurable in a config 
     - proxy the answered png to the requesting client
+  - mbtiles
+    - check if the zoom level is ok, not ok -> empty.png or fallback
+    - check the bounding box of the mbtiles metadata: not ok -> empty.png or fallback
+    - try to read the tile from the MBTiles file: not ok -> empty.png or fallback
   - if configured and provider is cacheable, cache the tile
 
 ## Restrictions
@@ -134,13 +138,13 @@ For performance boost you can enable caching of tiles. In the config enable the 
 caching:
   active: true
   path: ./tilecache
-  maxage: 2160 # in hours, 90 days = 2160
+  maxage: 168 # in hours, 7d * 24h = 168h
 ```
 
 `active`: set to true to activate tile caching
 
-`path`: path where the gomapproxy can store tiles. (Keep in mind how much storage you may need.)
-`maxage`: setting the maximal age of tiles in hours. If a tile is older, the background process will automatically delete this tile. 
+`path`: path where the `gomapproxy` can store tiles. (Keep in mind how much storage you may need.)
+`maxage`: setting the maximal age of tiles in hours. If a tile is older, the background process will automatically delete this tile and the app logic will no loger distribute this tile. 
 
 Second [optional]: if a provider should not be cached, use the nocache option
 
@@ -164,8 +168,12 @@ provider:
   osm:
     url:  https://tile.openstreetmap.org
     type: xyz
+    layers: # only for wms servers
     format: image/png
+    version: 1.1.0 # only for wms servers
     nocache: false
+    noprefetch: false
+    styles: # only for wms servers
     headers:
      Accept: image/png,image/jpg,*/*;q=0.8
      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0
@@ -173,8 +181,14 @@ provider:
 
 `url`: the url of the original tile server
 `type`: the type of server, xyz, tms or wms
+`layers` : only used for the wms type. The layer of the wms to be used
 `format`: the format of the tiles, returned by the server. No format conversion will be done.
-`nocache`: true to deactivate caching of this provider
+`version` : the version of the responses of the wms server. Only 1.1.0 and 1.3.0 are supported
+`nocache`: true to deactivate caching of this provider 
+`path` : path to the mbtiles file, for mbtiles provider only
+`noprefetch` : this provioder will not allow prefetching. There are some provider, who doesn't allow prefetching, like the osm. If you want to prevent prefetching, set this option to true. (There is an internal blacklist, too) 
+`styles` : some style setting for wms servers 
+`fallback` : for mbtiles you can set here an fallback provider. If a tile is not served from the mbtiles file, the app will try to read the file from this provider. Otherwise an empty.png will be displayed.
 `header`: add additional headers, as they may be needed by the provided tile server (like osm)
 
 ## A word on prefetching of tiles
