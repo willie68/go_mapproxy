@@ -33,7 +33,11 @@ archives:
     format_overrides:
       - goos: windows
         formats: ['zip']
-
+checksum:
+  algorithm: sha256
+  disable: false
+signs:
+  - artifacts: checksum
 changelog:
   sort: asc
   filters:

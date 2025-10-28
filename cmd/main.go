@@ -4,7 +4,11 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
+	"github.com/go-chi/chi/v5"
 	flag "github.com/spf13/pflag"
 	"github.com/willie68/go_mapproxy/configs"
 	"github.com/willie68/go_mapproxy/internal"
@@ -12,6 +16,7 @@ import (
 	"github.com/willie68/go_mapproxy/internal/config"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/prefetch"
+	"github.com/willie68/go_mapproxy/internal/utils/measurement"
 	"github.com/willie68/gowillie68/pkg/fileutils"
 )
 
@@ -29,7 +34,7 @@ func init() {
 	flag.BoolVarP(&initConfig, "init", "i", false, "init config, writes out a default config.")
 	flag.BoolVarP(&showVersion, "version", "v", false, "showing the version")
 	flag.StringVarP(&configFile, "config", "c", "config.yaml", "this is the path and filename to the config file")
-	flag.IntVarP(&port, "port", "p", 8580, "overwrite the port of the config")
+	flag.IntVarP(&port, "port", "p", 0, "overwrite the port (8580) of the config")
 	flag.IntVarP(&pfZoom, "zoom", "z", 0, "max zoom for prefetch tiles")
 	flag.StringVarP(&pfSystem, "system", "s", "", "prefetch system, if empty no prefetching will be done, csv if more than one needed.")
 	flag.Usage = func() {
@@ -43,7 +48,7 @@ func init() {
 		fmt.Println("run as proxy with caching: take the default config, add your needed provider,switch caching to true and set a path. Than run")
 		fmt.Printf("%s -c config.yaml\n", os.Args[0])
 		fmt.Println("run as proxy with caching and prefetching zomm 5: take the default config, add your needed provider,switch caching to true and set a path. Than run")
-		fmt.Printf("%s -c config.yaml -s <your system to be cached> -z 4\n", os.Args[0])
+		fmt.Printf("%s -c config.yaml -s <your provider to be cached> -z 4\n", os.Args[0])
 	}
 }
 
@@ -66,33 +71,63 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if port != config.Get().Port {
-		config.Get().Port = port
-	}
-	js, err := config.Get().ToJSON()
-	if err != nil {
-		panic(err)
+
+	config.SetParameter(config.WithPort(port))
+	js := config.JSON()
+	if js == "" {
+		panic("error on marshal config to json")
 	}
 	fmt.Printf("Config:\n%s\n", js)
 	log = logging.New().WithName("main")
-	log.Info("starting tms service")
+	log.Info("starting tile service")
 
 	internal.Init()
 
 	if pfSystem != "" && pfZoom > 0 {
 		go func() {
-			log.Infof("starting prefetch for system %s with zoom %d", pfSystem, pfZoom)
+			log.Infof("starting prefetch for provider %s with zoom %d", pfSystem, pfZoom)
 			prefetch.Prefetch(pfSystem, pfZoom)
 			log.Info("prefetch finnished")
 		}()
 	}
+	// Setup graceful shutdown
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
-	http.HandleFunc("/", api.NewTMSHandler(internal.Inj).Handler)
-	err = http.ListenAndServe(fmt.Sprintf(":%d", config.Get().Port), nil)
+	go func() {
+		<-c
+		log.Info("shutting down server...")
+		internal.Stop()
+		os.Exit(0)
+	}()
+
+	r := chi.NewRouter()
+	r.Mount("/metrics", measurement.Routes(internal.Inj))
+	r.Mount("/tileserver", api.NewTMSHandler(internal.Inj))
+
+	walkFunc := func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
+		log.Infof("api route: %s %s", method, route)
+		return nil
+	}
+
+	if err := chi.Walk(r, walkFunc); err != nil {
+		log.Alertf("could not walk api routes. %v", err)
+	}
+
+	server := &http.Server{
+		Addr:         fmt.Sprintf(":%d", config.Port()),
+		WriteTimeout: time.Second * 15,
+		ReadTimeout:  time.Second * 15,
+		IdleTimeout:  time.Second * 60,
+		Handler:      r,
+	}
+
+	err = server.ListenAndServe()
 	if err != nil {
 		log.Fatalf("error on listen and serv: %v", err)
 	}
 	log.Info("server finished")
+	internal.Stop()
 }
 
 func showUsage() {

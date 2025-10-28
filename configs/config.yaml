@@ -11,8 +11,13 @@ logging:
   gelf-url: # using some kind of gelf compatible server (as graylog) you can set here url of the server
   gelf-port: # port of the gelf server
 
-wmss: # here starts the wms server parts
-  gebco: # one wns server section, will be availble with http://localhost:8580/gebco/tms/{z}/{x}/{y}.png
+provider: # here starts the tileserver parts
+  gebco: # one wms server section, will be availble with http://localhost:8580/gebco/tms/{z}/{x}/{y}.png
     url: https://geoserver.openseamap.org/geoserver/gwc/service/wms  # the server to use
-    layers: gebco2021:gebco_2021 # the layers
+    type: wms # which type of server (tms, wms, xyz)
+    layers: gebco2021:gebco_2021 # the layers (for wms)
     format: image/png # normally the tiles are in png format, format conversion will not be done
+    nocache: false
+    headers: # here you can set additional headers, if the server (like osm) requires some special headers
+      Accept: image/png,image/jpg,*/*;q=0.8
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0

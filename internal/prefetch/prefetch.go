@@ -2,45 +2,67 @@ package prefetch
 
 import (
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/samber/do/v2"
-	"github.com/willie68/go_mapproxy/internal"
 	"github.com/willie68/go_mapproxy/internal/logging"
-	"github.com/willie68/go_mapproxy/internal/mercantile"
 	"github.com/willie68/go_mapproxy/internal/model"
-	"github.com/willie68/go_mapproxy/internal/tilecache"
-	"github.com/willie68/go_mapproxy/internal/wms"
 	"github.com/willie68/gowillie68/pkg/extstrgutils"
 )
 
 var log = logging.New().WithName("prefetch")
 
-func Prefetch(systems string, maxzoom int) error {
-	const numWorkers = 16 // Anzahl paralleler Worker
-	syss := extstrgutils.SplitMultiValueParam(systems)
+type Config struct {
+	Workers int `yaml:"workers"` // number of parallel workers
+}
+
+type pfConfig interface {
+	GetPrefetchConfig() Config
+}
+
+type providerFactory interface {
+	IsPrefetchable(providerName string) bool
+	FTile(tile model.Tile) (io.ReadCloser, error)
+}
+
+type tileCache interface {
+	Has(tile model.Tile) bool
+}
+
+var myinj do.Injector
+
+func Init(inj do.Injector) {
+	myinj = inj
+}
+
+// Prefetch lädt Kacheln für die angegebenen Systeme und Zoomstufen vor.
+func Prefetch(providers string, maxzoom int) error {
+	cfg := do.MustInvokeAs[pfConfig](myinj).GetPrefetchConfig()
+	workers := 10
+	if cfg.Workers > 0 {
+		workers = cfg.Workers
+	}
+	syss := extstrgutils.SplitMultiValueParam(providers)
 	fmt.Printf("syss: %v", syss)
 	jobs := make(chan model.Tile, 1000)
 	wg := sync.WaitGroup{}
 
-	cache := do.MustInvokeAs[*tilecache.Cache](internal.Inj)
+	ts := do.MustInvokeAs[providerFactory](myinj)
+	cache := do.MustInvokeAs[tileCache](myinj)
 
 	// Worker starten
-	for range numWorkers {
+	for range workers {
 		wg.Go(func() {
 			for j := range jobs {
-				wms := do.MustInvokeNamed[wms.Service](internal.Inj, j.System)
-
-				fmt.Printf("caching for z: %d, x: %d, y: %d\r\n", j.Z, j.X, j.Y)
-				rd, err := wms.WMSTile(tileToBBox(j))
-				if err != nil {
-					log.Errorf("error getting tile: %v", err)
-					continue
-				}
-				defer rd.Close()
-				err = cache.Save(j, rd)
-				if err != nil {
-					log.Errorf("error caching tile: %v", err)
+				if ts.IsPrefetchable(j.Provider) {
+					rd, err := ts.FTile(j)
+					if err != nil {
+						log.Errorf("error getting tile: %v", err)
+						continue
+					}
+					defer rd.Close()
+					log.Infof("fetched tile: %v", j)
 				}
 			}
 		})
@@ -53,10 +75,10 @@ func Prefetch(systems string, maxzoom int) error {
 			for x := range rg {
 				for y := range rg {
 					tile := model.Tile{
-						System: sys,
-						X:      x,
-						Y:      y,
-						Z:      z,
+						Provider: sys,
+						X:        x,
+						Y:        y,
+						Z:        z,
 					}
 					if !cache.Has(tile) {
 						jobs <- tile
@@ -68,14 +90,4 @@ func Prefetch(systems string, maxzoom int) error {
 	close(jobs)
 	wg.Wait()
 	return nil
-}
-
-// Hilfsfunktion für XYZ->BBOX-Konvertierung
-func tileToBBox(t model.Tile) mercantile.Bbox {
-	ti := mercantile.TileID{
-		X: t.X,
-		Y: t.Y,
-		Z: t.Z,
-	}
-	return mercantile.XyBounds(ti)
 }

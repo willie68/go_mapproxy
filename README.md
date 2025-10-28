@@ -2,9 +2,9 @@
 
 ## Preface
 
-**go_mapproxy** is a lightweight, high-performance proxy application for Tile Map Services (TMS) and WMS services, written in Go. It is designed to provide fast and efficient access to map tiles from various sources, with optional caching and prefetching capabilities. The application is suitable for both production use and for developers who want to build or optimize their own mapping solutions. 
+**go_mapproxy** is a lightweight, high-performance proxy application for Slippy Map (xyz), Tile Map Services (TMS) and WMS services, written in Go. It is designed to provide fast and efficient access to map tiles from various sources, with optional caching and prefetching capabilities. The application is suitable for both production use and for developers who want to build or optimize their own mapping solutions. 
 
-The original primary purpose was to provide a lightweight service that could be installed on your map client and would proxy TMS requests to WMS. (see https://github.com/willie68/MCSDepthLoggerUI)
+The original primary purpose was to provide a lightweight service that could be installed on your map client and would proxy XYZ requests to WMS. (see https://github.com/willie68/MCSDepthLoggerUI)
 
 ------
 
@@ -12,9 +12,9 @@ The original primary purpose was to provide a lightweight service that could be 
 
 The main goals of **go_mapproxy** are:
 
-- **Proxy Functionality:** Forward TMS requests to a WMS map server.
+- **Proxy Functionality:** Forward XYZ requests to a XYZ, TMS or WMS map server.
 - **Caching:** Optionally cache tiles to speed up access and reduce server load.
-- **Prefetching:** Preload tiles for defined zoom levels and map systems.
+- **Prefetching:** Preload tiles for defined zoom levels and map providers.
 - **Simple Configuration:** Use a clear YAML configuration file for quick and easy setup.
 
 ------
@@ -31,44 +31,60 @@ Start the proxy with a configuration file:
 
 1. Enable caching and set a cache path in your configuration.
 
+   ```yaml
+   caching:
+     active: true
+     path: ./tilecache
+     maxage: 2160 # in hours, 90 days = 2160
+   ```
+
 2. Start the application:
 
 `gomapproxy -c config.yaml`
 
 ### Proxy with Prefetching
 
-To prefetch tiles up to a certain zoom level for a specific system:
+To prefetch tiles up to a certain zoom level for a specific provider:
 
-`gomapproxy -c config.yaml -s <systemname> -z 4`
+`gomapproxy -c config.yaml -s <providernames as csv> -z 4`
+
+### Check functionality
+if you want to try, that your proxy is working simply load a tile. The URL for such a request is 
+`http://[your hostname]:[port]/[provider]/[z]/[x]/[y].png` 
+
+e.g. `http://localhost:8580/osm/xyz/4/8/5.png`
 
 ### Command Line Options
 
-- `-c, --config`: Path to the configuration file (default: [config.yaml](vscode-file://vscode-app/c:/Users/wklaa/AppData/Local/Programs/Microsoft VS Code/resources/app/out/vs/code/electron-browser/workbench/workbench.html))
+- `-c, --config`: Path to the configuration file (default: config.yaml)
 - `-p, --port`: Overwrite the port specified in the config
 - `-i, --init`: Write out a default config file
 - `-v, --version`: Show the current version
 - `-z, --zoom`: Max zoom for prefetch tiles
-- `-s, --system`: Prefetch system (comma-separated for multiple systems)
+- `-s, --system`: Prefetch provider (comma-separated for multiple provider)
 
 ------
 
 ## Configuration Examples
 
-### Minimal Example 
+### Minimal Example without caching
 
 ```yaml
 port: 8580
 caching:
-  active: true
+  active: false
   path: ./tilecache
-providers:
+  maxage: 2160 # in hours, 90 days = 2160
+
+provider:
   gebco:
-    url: "https://geoserver.openseamap.org/geoserver/gwc/service/wms"
-    layers: "gebco2021:gebco_2021"
-    format: "image/png"
+    url: https://geoserver.openseamap.org/geoserver/gwc/service/wms
+    type: wmss
+    layers: gebco2021:gebco_2021
+    format: image/png
+    cached: false
+
 ```
-
-
 
 ### Prefetch for Multiple Systems
 
@@ -79,7 +95,7 @@ providers:
 ## Further Information
 
 - Full documentation and examples:
-  [https://github.com/willie68/go_mapproxy](vscode-file://vscode-app/c:/Users/wklaa/AppData/Local/Programs/Microsoft VS Code/resources/app/out/vs/code/electron-browser/workbench/workbench.html)
+  [Project Readme](https://github.com/willie68/go_mapproxy)
 - For questions or support, please open an issue on GitHub.
 
 ------
@@ -87,22 +103,84 @@ providers:
 **Note:**
 This application is cross-platform and can be run on any system with a Go runtime.
 
-## How this will work
-- take a tms request
-- convert xyz to wms bounding box
-- do the wms request on the desired server, server configurable in a config 
-- proxy the answered png to the requesting client
-- if configured, a simple file cache is applied
+## internal workflow: How this will work
+- take a xyz request
+- check provider
+- if provider is cached, try cache -> ok, return tile
+- -> not ok, check provider type 
+  - wms
+    - convert xyz to wms bounding box
+    - do the wms request on the desired server, server configurable in a config 
+    - proxy the answered png to the requesting client
+  - tms
+    - invert y coordinate
+    - do the tms request on the desired server, server configurable in a config 
+    - proxy the answered png to the requesting client
+  - xyz
+    - do the tms request on the desired server, server configurable in a config 
+    - proxy the answered png to the requesting client
+  - if configured and provider is cacheable, cache the tile
 
 ## Restrictions
 - only 256x256px tiles possible
 - only srs=EPSG:3857 is possible
 - no server description is proxied
 
+## Caching
+
+For performance boost you can enable caching of tiles. In the config enable the cache. 
+
+```yaml
+caching:
+  active: true
+  path: ./tilecache
+  maxage: 2160 # in hours, 90 days = 2160
+```
+
+`active`: set to true to activate tile caching
+
+`path`: path where the gomapproxy can store tiles. (Keep in mind how much storage you may need.)
+`maxage`: setting the maximal age of tiles in hours. If a tile is older, the background process will automatically delete this tile. 
+
+Second [optional]: if a provider should not be cached, use the nocache option
+
+```yaml
+provider:
+ osm:
+  url:  https://tile.openstreetmap.org
+  type: xyz
+  format: image/png
+  nocache: true
+```
+
+`nocache`: set this property to true and all tiles requested from this server will not be stored into the cache.
+
+The cache will store the tiles file by a double subfolder structure based on the file hash. And than the tile metadata will be stored in a key/value store database, key is the metadata (provider, x,y,z), value the hash of the tile. As the hash is unique for the tiles, tiles with identically content will have the same hash. And will be stored only once. (e.g. like tiles of the ocean) The database is stored in the subdirectory `badger` (as it's a badgerdb) and the tiles will be stored in a sub folder `tiles`. (Single-Instance-Storage)
+
+## Provider configuration
+
+```yaml
+provider:
+  osm:
+    url:  https://tile.openstreetmap.org
+    type: xyz
+    format: image/png
+    nocache: false
+    headers:
+     Accept: image/png,image/jpg,*/*;q=0.8
+     User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0
+```
+
+`url`: the url of the original tile server
+`type`: the type of server, xyz, tms or wms
+`format`: the format of the tiles, returned by the server. No format conversion will be done.
+`nocache`: true to deactivate caching of this provider
+`header`: add additional headers, as they may be needed by the provided tile server (like osm)
+
 ## A word on prefetching of tiles
 
-You can prefetch single/multiple system with the `system` and `zoom` parameter. All tiles of the the systems from 0 to zoom will be prefetched. (At this time no prefetch bonding boxes are configurable) Be aware you need the space for that. Prefechting with level 8 is round about 1GB. (depends on the wms provider) Level 9 ~ 5GB... (And it will take some time)
+You can prefetch single/multiple provider with the `system` and `zoom` parameter. All tiles of the the selected provider from 0 to zoom will be prefetched. (At this time no prefetch bonding boxes are configurable) Be aware you need the space for that. Prefechting with level 8 is round about 1GB. (depends on the wms provider) Level 9 ~ 5GB... (And it will take some time)
 
-example: `gomapproxy .c config.yaml -s gebco -z 9`
+example: `gomapproxy -c config.yaml -s gebco -z 9`
 
 This will prefetch all tiles from the server with the alias gebco for zoom levels 0 to 9.

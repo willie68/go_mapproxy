@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -10,118 +9,83 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/samber/do/v2"
-	"github.com/willie68/go_mapproxy/internal"
 	"github.com/willie68/go_mapproxy/internal/logging"
-	"github.com/willie68/go_mapproxy/internal/mercantile"
 	"github.com/willie68/go_mapproxy/internal/model"
-	"github.com/willie68/go_mapproxy/internal/tilecache"
-	"github.com/willie68/go_mapproxy/internal/wms"
+	"github.com/willie68/go_mapproxy/internal/utils/measurement"
 )
 
+type providerService interface {
+	HasProvider(providerName string) bool
+	FTile(tile model.Tile) (io.ReadCloser, error)
+}
+
 type TMSHandler struct {
-	log   *logging.Logger
-	cache tilecache.TileCache
-	wmss  wms.WMSConfigMap
+	log     *logging.Logger
+	tiles   providerService
+	metrics *measurement.Service
 }
 
-func NewTMSHandler(inj do.Injector) *TMSHandler {
-	return &TMSHandler{
-		log:   logging.New().WithName("api"),
-		cache: do.MustInvokeAs[tilecache.TileCache](inj),
-		wmss:  do.MustInvoke[wms.WMSConfigMap](inj),
+func NewTMSHandler(inj do.Injector) *chi.Mux {
+	th := &TMSHandler{
+		log:     logging.New().WithName("api"),
+		tiles:   do.MustInvokeAs[providerService](inj),
+		metrics: do.MustInvokeAs[*measurement.Service](inj),
 	}
+	router := chi.NewRouter()
+	router.Get("/{provider}/xyz/{z}/{x}/{y}.png", th.GetSystemHandler(inj))
+	return router
 }
 
-func (h *TMSHandler) Handler(w http.ResponseWriter, r *http.Request) {
-	// URL: /{system}/tms/{z}/{x}/{y}.png
-	path := r.URL.Path
-	h.log.Infof("path: %s", path)
-	tile, err := h.getRequestParameter(path)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Path error: %s", err.Error()), http.StatusBadRequest)
-		return
-	}
+func (h *TMSHandler) GetSystemHandler(inj do.Injector) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		td := h.metrics.Start("getTile")
+		defer td.Stop()
 
-	// try to get the cached tile
-	if tr, ok := h.cache.Tile(tile); ok {
-		h.log.Debugf("tile found in cache: %s", tile.String())
-		w.Header().Set("Content-Type", "image/png")
-		io.Copy(w, tr)
-		if rc, ok := tr.(io.ReadCloser); ok {
-			rc.Close()
+		// URL: /tileserver/{provider}/xyz/{z}/{x}/{y}.png
+		h.log.Infof("path: %s", r.URL.Path)
+		tile, err := h.getRequestParameter(r)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Path error: %s", err.Error()), http.StatusBadRequest)
+			return
 		}
-		return
-	}
 
-	wms, err := do.InvokeNamed[wms.Service](internal.Inj, tile.System)
-	if err != nil {
-		http.Error(w, "System error", http.StatusInternalServerError)
-		return
-	}
-	rd, err := wms.WMSTile(h.tileToBBox(tile))
-	if err != nil {
-		h.log.Errorf("System error: %v", err)
-		http.Error(w, fmt.Sprintf("System error: %s", err.Error()), http.StatusInternalServerError)
-		return
-	}
-	defer rd.Close()
+		rd, err := h.tiles.FTile(tile)
+		if err != nil {
+			h.log.Errorf("System error: %v", err)
+			http.Error(w, fmt.Sprintf("System error: %s", err.Error()), http.StatusInternalServerError)
+			return
+		}
+		defer rd.Close()
 
-	w.Header().Set("Content-Type", "image/png")
-	// if cache is inactive simply, copy the content to the requester
-	if !h.cache.IsActive() {
+		w.Header().Set("Content-Type", "image/png")
 		io.Copy(w, rd)
-		return
-	}
-	// otherwise read the data and write them in parallel to the cache and the requester
-	data, err := io.ReadAll(rd)
-	if err != nil {
-		http.Error(w, "erorr reading data from wms server", http.StatusInternalServerError)
-		return
-	}
-
-	wr := bytes.NewReader(data)
-	err = h.cache.Save(tile, wr)
-	if err != nil {
-		http.Error(w, "error writing to the cache", http.StatusInternalServerError)
-		return
-	}
-	wr = bytes.NewReader(data)
-	io.Copy(w, wr)
+	})
 }
 
-// Hilfsfunktion für XYZ->BBOX-Konvertierung
-func (h *TMSHandler) tileToBBox(tile model.Tile) mercantile.Bbox {
-	t := mercantile.TileID{
-		X: tile.X,
-		Y: tile.Y,
-		Z: tile.Z,
-	}
-	return mercantile.XyBounds(t)
-}
+func (h *TMSHandler) getRequestParameter(r *http.Request) (tile model.Tile, err error) {
+	tile.Provider = chi.URLParam(r, "provider")
+	zs := chi.URLParam(r, "z")
+	xs := chi.URLParam(r, "x")
+	ys := chi.URLParam(r, "y")
 
-func (h *TMSHandler) getRequestParameter(path string) (tile model.Tile, err error) {
-	p := strings.Split(path, "/")
-	if len(p) != 6 {
-		return tile, errors.New("Path error")
-	}
-	tile.System = p[1]
-	if _, ok := h.wmss[tile.System]; !ok {
-		return tile, errors.New("unknown system")
-	}
-	tile.Z, err = strconv.Atoi(p[3])
+	tile.Z, err = strconv.Atoi(zs)
 	if err != nil {
-		return tile, errors.New("error in zoom")
+		return tile, errors.New("error in zoom level")
 	}
-	tile.X, err = strconv.Atoi(p[4])
+	tile.X, err = strconv.Atoi(xs)
 	if err != nil {
 		return tile, errors.New("error in x axis")
 	}
-	fn := filepath.Base(p[5])
-	ys := strings.TrimSuffix(fn, filepath.Ext(fn))
+	ys = strings.TrimSuffix(ys, filepath.Ext(ys))
 	tile.Y, err = strconv.Atoi(ys)
 	if err != nil {
 		return tile, errors.New("error in y axis")
+	}
+
+	if !h.tiles.HasProvider(tile.Provider) {
+		return tile, errors.New("unknown provider")
 	}
 	if !h.isValidTMSCoord(tile.X, tile.Y, tile.Z) {
 		return tile, errors.New("invalid tile coordinates")

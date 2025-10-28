@@ -2,19 +2,38 @@ port: 8580
 cache:
   active: true
   path: ./testdata/cache
-  maxage: 2160 # in hours, 90 days = 2160
+  maxage: 168 # in hours, 7d * 24h = 168h
 
 logging:
   level: debug
 
-wmss: 
+provider: 
   gebco:
     url: https://geoserver.openseamap.org/geoserver/gwc/service/wms
+    type: wmss
     layers: gebco2021:gebco_2021
     format: image/png
+    nocache: false
   osm-terrestris:
     url:  https://ows.terrestris.de/osm/service?
+    type: wmss
     layers: OSM-WMS
     format: image/png
     version: 1.1.0
+    nocache: true
+    noprefetch: true
     styles: 
+  osmde:
+    url:  https://tile.openstreetmap.de
+    type: xyz
+    format: image/png
+    nocache: false
+    noprefetch: true
+    headers:
+      Accept: image/png,image/jpg,*/*;q=0.8
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0
+  adria:
+    type: mbtiles
+    path: ./testdata/OSM-OpenCPN2-Adria.mbtiles
+    nocache: true
+    fallback: osmde
