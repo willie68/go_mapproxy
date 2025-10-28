@@ -141,6 +141,14 @@ func (c *Cache) Tile(tile model.Tile) (io.ReadCloser, bool) {
 		c.log.Errorf("cache file %s not found", file)
 		return nil, false
 	}
+	if c.isRejected(fi) {
+		err := os.Remove(file)
+		if err != nil {
+			c.log.Errorf("error removing rejected cache file %s: %v", file, err)
+		}
+		c.log.Errorf("cache file %s is rejected", file)
+		return nil, false
+	}
 	if fi.Size() < 100 {
 		c.log.Errorf("cache file %s is too small", file)
 		return nil, false
@@ -371,6 +379,17 @@ func (c *Cache) getFilename(hash string) (string, string) {
 	hashDir := filepath.Join(c.getTilesPath(), hash[:3], hash[3:6])
 	hashFile := filepath.Join(hashDir, hash+".png")
 	return hashDir, hashFile
+}
+
+func (c *Cache) isRejected(fi os.FileInfo) bool {
+	if c.maxage <= 0 {
+		return false
+	}
+	age := time.Since(fi.ModTime())
+	if age > time.Duration(c.maxage)*time.Hour {
+		return true
+	}
+	return false
 }
 
 func (d dbEntry) Marshal() ([]byte, error) {

@@ -1,5 +1,6 @@
 package tiles
 
+// This service implements the tile service business logic to get tiles from providers and cache them if needed
 import (
 	"bytes"
 	"fmt"
@@ -43,8 +44,6 @@ func Init(inj do.Injector) {
 }
 
 func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
-	// try to get the cached tile
-
 	if !s.HasProvider(tile.Provider) {
 		return nil, provider.ErrNotFound
 	}
@@ -76,7 +75,6 @@ func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
 	td.Stop()
 
 	if s.IsCached(tile.Provider) {
-		// if cache is inactive simply, get the tile from the tileserver
 		if !s.cache.IsActive() {
 			return rd, nil
 		}
