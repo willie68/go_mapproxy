@@ -58,7 +58,7 @@ func Init(inj do.Injector) {
 	do.ProvideValue(inj, &sf)
 	for sname, config := range sf.configs {
 		switch config.Type {
-		case "wmss":
+		case "wms":
 			var s Service = &wmsProvider{
 				name:   sname,
 				log:    logging.New().WithName(fmt.Sprintf("wms: %s", sname)),

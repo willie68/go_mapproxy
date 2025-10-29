@@ -13,7 +13,7 @@
             "output": "debug.exe",
             "cwd": "${workspaceFolder}",
             "args": [
-                "--config", "${workspaceFolder}/configs/config_cache.yaml"
+                "--config", "${workspaceFolder}/configs/config.yaml"
             ]
         },
         {

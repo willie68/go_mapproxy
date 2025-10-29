@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/willie68/gowillie68/pkg/extstrgutils"
+	"github.com/willie68/go_mapproxy/pkg/extstrgutils"
 )
 
 func TestSplit(t *testing.T) {

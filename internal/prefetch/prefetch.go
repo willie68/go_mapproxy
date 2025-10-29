@@ -8,7 +8,7 @@ import (
 	"github.com/samber/do/v2"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/model"
-	"github.com/willie68/gowillie68/pkg/extstrgutils"
+	"github.com/willie68/go_mapproxy/pkg/extstrgutils"
 )
 
 var log = logging.New().WithName("prefetch")

@@ -13,13 +13,13 @@ logging:
 provider: 
   gebco:
     url: https://geoserver.openseamap.org/geoserver/gwc/service/wms
-    type: wmss
+    type: wms
     layers: gebco2021:gebco_2021
     format: image/png
     nocache: false
   osm-terrestris:
     url:  https://ows.terrestris.de/osm/service?
-    type: wmss
+    type: wms
     layers: OSM-WMS
     format: image/png
     version: 1.1.0

@@ -14,7 +14,7 @@ import (
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/prefetch"
 	"github.com/willie68/go_mapproxy/internal/shttp"
-	"github.com/willie68/gowillie68/pkg/fileutils"
+	"github.com/willie68/go_mapproxy/pkg/fileutils"
 )
 
 var (
