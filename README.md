@@ -50,9 +50,9 @@ To prefetch tiles up to a certain zoom level for a specific provider:
 
 ### Check functionality
 if you want to try, that your proxy is working simply load a tile. The URL for such a request is 
-`http://[your hostname]:[port]/[provider]/[z]/[x]/[y].png` 
+`http://[your hostname]:[port]/tileserver/[provider]/[z]/[x]/[y].png` 
 
-e.g. `http://localhost:8580/osm/xyz/4/8/5.png`
+e.g. `http://localhost:8580/tileserver/osm/xyz/4/8/5.png`
 
 ### Command Line Options
 
@@ -79,7 +79,7 @@ caching:
 provider:
   gebco:
     url: https://geoserver.openseamap.org/geoserver/gwc/service/wms
-    type: wmss
+    type: wms
     layers: gebco2021:gebco_2021
     format: image/png
     cached: false
@@ -165,7 +165,7 @@ The cache will store the tiles file by a double subfolder structure based on the
 
 ```yaml
 provider:
-  osm:
+  <provider name>:
     url:  https://tile.openstreetmap.org
     type: xyz
     layers: # only for wms servers
@@ -173,7 +173,9 @@ provider:
     version: 1.1.0 # only for wms servers
     nocache: false
     noprefetch: false
+    path: # path to the mbtiles file, for mbtiles only
     styles: # only for wms servers
+    fallback: <provider name> # fallback provider
     headers:
      Accept: image/png,image/jpg,*/*;q=0.8
      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0
