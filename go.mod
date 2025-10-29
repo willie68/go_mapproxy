@@ -6,8 +6,10 @@ require (
 	github.com/aphistic/golf v0.0.0-20180712155816-02c07f170c5a
 	github.com/dgraph-io/badger/v4 v4.8.0
 	github.com/go-chi/chi/v5 v5.2.3
+	github.com/go-chi/cors v1.2.2
 	github.com/go-chi/render v1.0.3
 	github.com/i0tool5/mbtiles-go v0.1.0
+	github.com/pkg/errors v0.9.1
 	github.com/samber/do/v2 v2.0.0
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1

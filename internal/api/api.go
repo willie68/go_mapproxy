@@ -1,109 +1,99 @@
 package api
 
 import (
-	"errors"
-	"fmt"
-	"io"
 	"net/http"
-	"path/filepath"
-	"strconv"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
+	"github.com/go-chi/render"
 	"github.com/samber/do/v2"
+	"github.com/willie68/go_mapproxy/internal"
 	"github.com/willie68/go_mapproxy/internal/logging"
-	"github.com/willie68/go_mapproxy/internal/model"
 	"github.com/willie68/go_mapproxy/internal/utils/measurement"
 )
 
-type providerService interface {
-	HasProvider(providerName string) bool
-	FTile(tile model.Tile) (io.ReadCloser, error)
+// defining all sub pathes for api v1
+const (
+	// APIVersion the actual implemented api version
+	APIVersion = "1"
+	// MetricsEndpoint endpoint subpath  for metrics
+	metricsEndpoint = "/metrics"
+	// TileserverEndpoint endpoint subpath for tile server
+	tileserverEndpoint = "/tileserver"
+)
+
+var logger = logging.New().WithName("api")
+
+// Handler a http REST interface handler
+type Handler interface {
+	// Routes get the routes
+	Routes() (string, *chi.Mux)
 }
 
-type TMSHandler struct {
-	log     *logging.Logger
-	tiles   providerService
-	metrics *measurement.Service
-}
-
-func NewTMSHandler(inj do.Injector) *chi.Mux {
-	th := &TMSHandler{
-		log:     logging.New().WithName("api"),
-		tiles:   do.MustInvokeAs[providerService](inj),
-		metrics: do.MustInvokeAs[*measurement.Service](inj),
-	}
+// APIRoutes configuring the api routes for the main REST API
+func APIRoutes(inj do.Injector) (*chi.Mux, error) {
 	router := chi.NewRouter()
-	router.Get("/{provider}/xyz/{z}/{x}/{y}.png", th.GetSystemHandler(inj))
-	return router
-}
+	setDefaultHandler(router)
 
-func (h *TMSHandler) GetSystemHandler(inj do.Injector) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		td := h.metrics.Start("getTile")
-		defer td.Stop()
-
-		// URL: /tileserver/{provider}/xyz/{z}/{x}/{y}.png
-		h.log.Infof("path: %s", r.URL.Path)
-		tile, err := h.getRequestParameter(r)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Path error: %s", err.Error()), http.StatusBadRequest)
-			return
-		}
-
-		rd, err := h.tiles.FTile(tile)
-		if err != nil {
-			h.log.Errorf("System error: %v", err)
-			http.Error(w, fmt.Sprintf("System error: %s", err.Error()), http.StatusInternalServerError)
-			return
-		}
-		defer rd.Close()
-
-		w.Header().Set("Content-Type", "image/png")
-		io.Copy(w, rd)
+	// building the routes
+	router.Route("/", func(r chi.Router) {
+		r.Mount(tileserverEndpoint, NewXYZHandler(internal.Inj))
+		r.Mount(metricsEndpoint, measurement.Routes(internal.Inj))
 	})
+	// adding a file server with web client asserts
+	logger.Info("api routes")
+
+	walkFunc := func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
+		logger.Infof("api route: %s %s", method, route)
+		return nil
+	}
+
+	if err := chi.Walk(router, walkFunc); err != nil {
+		logger.Alertf("could not walk api routes. %s", err.Error())
+	}
+	return router, nil
 }
 
-func (h *TMSHandler) getRequestParameter(r *http.Request) (tile model.Tile, err error) {
-	tile.Provider = chi.URLParam(r, "provider")
-	zs := chi.URLParam(r, "z")
-	xs := chi.URLParam(r, "x")
-	ys := chi.URLParam(r, "y")
-
-	tile.Z, err = strconv.Atoi(zs)
-	if err != nil {
-		return tile, errors.New("error in zoom level")
-	}
-	tile.X, err = strconv.Atoi(xs)
-	if err != nil {
-		return tile, errors.New("error in x axis")
-	}
-	ys = strings.TrimSuffix(ys, filepath.Ext(ys))
-	tile.Y, err = strconv.Atoi(ys)
-	if err != nil {
-		return tile, errors.New("error in y axis")
-	}
-
-	if !h.tiles.HasProvider(tile.Provider) {
-		return tile, errors.New("unknown provider")
-	}
-	if !h.isValidTMSCoord(tile.X, tile.Y, tile.Z) {
-		return tile, errors.New("invalid tile coordinates")
-	}
-	return tile, nil
+func setDefaultHandler(router *chi.Mux) {
+	router.Use(
+		render.SetContentType(render.ContentTypeJSON),
+		middleware.Logger,
+		middleware.Recoverer,
+		cors.Handler(cors.Options{
+			// AllowedOrigins: []string{"https://foo.com"}, // Use this to allow specific origin hosts
+			AllowedOrigins: []string{"*"},
+			// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
+			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-mcs-username", "X-mcs-password", "X-mcs-profile"},
+			ExposedHeaders:   []string{"Link"},
+			AllowCredentials: true,
+			MaxAge:           300, // Maximum value not ignored by any of major browsers
+		}),
+	)
 }
 
-// Checks if the given TMS coordinates are valid for the given zoom level.
-func (h *TMSHandler) isValidTMSCoord(x, y, zoom int) bool {
-	if zoom < 0 {
-		return false
+// HealthRoutes returning the health routes
+func HealthRoutes(inj do.Injector) *chi.Mux {
+	router := chi.NewRouter()
+	router.Use(
+		render.SetContentType(render.ContentTypeJSON),
+		middleware.Logger,
+		middleware.Recoverer,
+	)
+
+	router.Route("/", func(r chi.Router) {
+		r.Mount("/health/metrics", measurement.Routes(internal.Inj))
+	})
+
+	logger.Info("health api routes")
+	walkFunc := func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
+		logger.Infof("health route: %s %s", method, route)
+		return nil
 	}
-	max := 1 << zoom // 2^zoom
-	if x < 0 || x >= max {
-		return false
+	if err := chi.Walk(router, walkFunc); err != nil {
+		logger.Alertf("could not walk health routes. %s", err.Error())
 	}
-	if y < 0 || y >= max {
-		return false
-	}
-	return true
+
+	return router
 }

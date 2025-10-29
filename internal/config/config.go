@@ -8,12 +8,13 @@ import (
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/prefetch"
 	"github.com/willie68/go_mapproxy/internal/provider"
+	"github.com/willie68/go_mapproxy/internal/shttp"
 	"github.com/willie68/go_mapproxy/internal/tilecache"
 	"go.yaml.in/yaml/v3"
 )
 
 type service struct {
-	Port      int                `yaml:"port"`
+	HTTP      shttp.Config       `yaml:"http"`
 	Providers provider.ConfigMap `yaml:"provider"`
 	Logging   logging.Config     `yaml:"logging"`
 	Cache     tilecache.Config   `yaml:"cache"`
@@ -48,14 +49,18 @@ func (c service) GetPrefetchConfig() prefetch.Config {
 	return c.Prefetch
 }
 
+func (c service) GetHttpConfig() shttp.Config {
+	return c.HTTP
+}
+
 func (c *service) SetPort(p int) {
 	if p > 0 {
-		c.Port = p
+		c.HTTP.Port = p
 	}
 }
 
 func (c *service) GetPort() int {
-	return c.Port
+	return c.HTTP.Port
 }
 
 func SetParameter(params ...ParameterOption) {
@@ -65,7 +70,7 @@ func SetParameter(params ...ParameterOption) {
 }
 
 func Port() int {
-	return config.Port
+	return config.HTTP.Port
 }
 
 // JSON returns the config as json string
@@ -92,8 +97,8 @@ func Load(file string) error {
 	if err != nil {
 		return fmt.Errorf("can't unmarshal config file: %s", err.Error())
 	}
-	if config.Port <= 0 {
-		config.Port = 8580
+	if config.HTTP.Port <= 0 {
+		config.HTTP.Port = 8580
 	}
 	return nil
 }

@@ -37,7 +37,17 @@ func Init(inj do.Injector) {
 }
 
 // Prefetch lädt Kacheln für die angegebenen Systeme und Zoomstufen vor.
-func Prefetch(providers string, maxzoom int) error {
+func Prefetch(providers string, maxzoom int) {
+	if providers != "" && maxzoom > 0 {
+		go func() {
+			log.Infof("starting prefetch for providers \"%s\" with zoom %d", providers, maxzoom)
+			prefetch(providers, maxzoom)
+			log.Info("prefetch finnished")
+		}()
+	}
+}
+
+func prefetch(providers string, maxzoom int) error {
 	cfg := do.MustInvokeAs[pfConfig](myinj).GetPrefetchConfig()
 	workers := 10
 	if cfg.Workers > 0 {

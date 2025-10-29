@@ -1,4 +1,6 @@
-port: 8580 # prot of the local http server
+http:
+  port: 8580 # port of the local http server
+  sslport: 0 # set to e.g. 8443 to enable https server
 
 cache: 
   active: false # to activate the cache set this to true
@@ -14,10 +16,14 @@ logging:
 provider: # here starts the tileserver parts
   gebco: # one wms server section, will be availble with http://localhost:8580/gebco/tms/{z}/{x}/{y}.png
     url: https://geoserver.openseamap.org/geoserver/gwc/service/wms  # the server to use
-    type: wms # which type of server (tms, wms, xyz)
+    type: wms # which type of server (tms, wms, xyz, mbtiles)
+    path: # path is only used for mbtiles provider
     layers: gebco2021:gebco_2021 # the layers (for wms)
     format: image/png # normally the tiles are in png format, format conversion will not be done
     nocache: false
+    version: 1.3.0 # wms version, default is 1.1.0
+    noprefetch: false # disable prefetching of tiles for this provider
+    styles:  # styles to use, empty means default style
     headers: # here you can set additional headers, if the server (like osm) requires some special headers
       Accept: image/png,image/jpg,*/*;q=0.8
       User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0

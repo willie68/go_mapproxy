@@ -2,13 +2,10 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
-	"syscall"
-	"time"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/samber/do/v2"
 	flag "github.com/spf13/pflag"
 	"github.com/willie68/go_mapproxy/configs"
 	"github.com/willie68/go_mapproxy/internal"
@@ -16,7 +13,7 @@ import (
 	"github.com/willie68/go_mapproxy/internal/config"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/prefetch"
-	"github.com/willie68/go_mapproxy/internal/utils/measurement"
+	"github.com/willie68/go_mapproxy/internal/shttp"
 	"github.com/willie68/gowillie68/pkg/fileutils"
 )
 
@@ -26,7 +23,7 @@ var (
 	showVersion bool
 	initConfig  bool
 	pfZoom      int
-	pfSystem    string
+	pfProviders string
 	port        int
 )
 
@@ -36,7 +33,7 @@ func init() {
 	flag.StringVarP(&configFile, "config", "c", "config.yaml", "this is the path and filename to the config file")
 	flag.IntVarP(&port, "port", "p", 0, "overwrite the port (8580) of the config")
 	flag.IntVarP(&pfZoom, "zoom", "z", 0, "max zoom for prefetch tiles")
-	flag.StringVarP(&pfSystem, "system", "s", "", "prefetch system, if empty no prefetching will be done, csv if more than one needed.")
+	flag.StringVarP(&pfProviders, "system", "s", "", "prefetch system, if empty no prefetching will be done, csv if more than one needed.")
 	flag.Usage = func() {
 		fmt.Printf("Usage of %s:\n", os.Args[0])
 		fmt.Println("more on https://github.com/willie68/go_mapproxy")
@@ -83,51 +80,28 @@ func main() {
 
 	internal.Init()
 
-	if pfSystem != "" && pfZoom > 0 {
-		go func() {
-			log.Infof("starting prefetch for provider %s with zoom %d", pfSystem, pfZoom)
-			prefetch.Prefetch(pfSystem, pfZoom)
-			log.Info("prefetch finnished")
-		}()
-	}
-	// Setup graceful shutdown
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	prefetch.Prefetch(pfProviders, pfZoom)
 
-	go func() {
-		<-c
-		log.Info("shutting down server...")
-		internal.Stop()
-		os.Exit(0)
-	}()
-
-	r := chi.NewRouter()
-	r.Mount("/metrics", measurement.Routes(internal.Inj))
-	r.Mount("/tileserver", api.NewTMSHandler(internal.Inj))
-
-	walkFunc := func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
-		log.Infof("api route: %s %s", method, route)
-		return nil
-	}
-
-	if err := chi.Walk(r, walkFunc); err != nil {
-		log.Alertf("could not walk api routes. %v", err)
-	}
-
-	server := &http.Server{
-		Addr:         fmt.Sprintf(":%d", config.Port()),
-		WriteTimeout: time.Second * 15,
-		ReadTimeout:  time.Second * 15,
-		IdleTimeout:  time.Second * 60,
-		Handler:      r,
-	}
-
-	err = server.ListenAndServe()
+	router, err := api.APIRoutes(internal.Inj)
 	if err != nil {
-		log.Fatalf("error on listen and serv: %v", err)
+		log.Errorf("could not create api routes: %v", err)
+		os.Exit(1)
 	}
+	healthRouter := api.HealthRoutes(internal.Inj)
+
+	sh := do.MustInvoke[shttp.SHttp](internal.Inj)
+	sh.StartServers(router, healthRouter)
+
+	log.Info("waiting for clients")
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	<-c
+
+	sh.ShutdownServers()
 	log.Info("server finished")
+
 	internal.Stop()
+	os.Exit(0)
 }
 
 func showUsage() {

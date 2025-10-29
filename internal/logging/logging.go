@@ -179,10 +179,11 @@ func (s *Logger) WithName(name string) *Logger {
 // Debug log this message at debug level
 func (s *Logger) Debug(m string) {
 	if s.LevelInt <= LvlDebug {
+		msg := s.msg(m)
 		if s.gelfActive {
-			_ = s.l.Dbg(m)
+			_ = s.l.Dbg(msg)
 		}
-		log.Printf("Debug: %s\n", m)
+		log.Printf("Debug: %s\n", msg)
 	}
 }
 
@@ -200,10 +201,11 @@ func (s *Logger) Debugf(format string, va ...any) {
 // Info log this message at info level
 func (s *Logger) Info(m string) {
 	if s.LevelInt <= LvlInfo {
+		msg := s.msg(m)
 		if s.gelfActive {
-			_ = s.l.Info(m)
+			_ = s.l.Info(msg)
 		}
-		log.Printf("Info: %s\n", m)
+		log.Printf("Info: %s\n", msg)
 	}
 }
 
@@ -221,10 +223,11 @@ func (s *Logger) Infof(format string, va ...any) {
 // Alert log this message at alert level
 func (s *Logger) Alert(m string) {
 	if s.LevelInt <= LvlAlert {
+		msg := s.msg(m)
 		if s.gelfActive {
-			_ = s.l.Alert(m)
+			_ = s.l.Alert(msg)
 		}
-		log.Printf("Alert: %s\n", m)
+		log.Printf("Alert: %s\n", msg)
 	}
 }
 
@@ -242,10 +245,11 @@ func (s *Logger) Alertf(format string, va ...any) {
 // Fatal logs a message at level Fatal on the standard logger.
 func (s *Logger) Fatal(m string) {
 	if s.LevelInt <= LvlFatal {
+		msg := s.msg(m)
 		if s.gelfActive {
-			_ = s.l.Crit(m)
+			_ = s.l.Crit(msg)
 		}
-		log.Printf("Fatal: %s\n", m)
+		log.Printf("Fatal: %s\n", msg)
 	}
 }
 
@@ -263,10 +267,11 @@ func (s *Logger) Fatalf(format string, va ...any) {
 // Error logs a message at level Error on the standard logger.
 func (s *Logger) Error(m string) {
 	if s.LevelInt <= LvlError {
+		msg := s.msg(m)
 		if s.gelfActive {
-			_ = s.l.Err(m)
+			_ = s.l.Err(msg)
 		}
-		log.Printf("Error: %s\n", m)
+		log.Printf("Error: %s\n", msg)
 	}
 }
 
@@ -304,6 +309,10 @@ func (s *Logger) IsError() bool {
 // IsFatal this logger is set to debug or info level
 func (s *Logger) IsFatal() bool {
 	return s.LevelInt <= LvlFatal
+}
+
+func (s *Logger) msg(msg string) string {
+	return fmt.Sprintf("%s: %s", s.name, msg)
 }
 
 // format the central format method
