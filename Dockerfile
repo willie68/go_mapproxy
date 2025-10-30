@@ -23,7 +23,7 @@ ENV GOOS="linux"
 ENV GOARCH="amd64"
 ENV CGO_ENABLED="0"
 
-RUN go build -ldflags="-s -w" -o service cmd/main.go \
+RUN go build -ldflags="-s -w" -o service main.go \
 ## Task: set permissions
     && chmod 0755 /src/service
 

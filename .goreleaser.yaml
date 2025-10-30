@@ -16,7 +16,7 @@ builds:
     goarch:
       - amd64
       - arm64
-    main: ./cmd/
+    main: ./
     ldflags:
       - -s -w -X github.com/willie68/go_mapproxy/internal/config.version={{.Version}} -X github.com/willie68/go_mapproxy/internal/config.commit={{.Commit}} -X github.com/willie68/go_mapproxy/internal/config.date={{.Date}}
 archives:
