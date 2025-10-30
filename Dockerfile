@@ -69,7 +69,7 @@ RUN set -eux; \
 ENTRYPOINT ["/service"]
 CMD ["--config","/config/config.yaml"]
 
-EXPOSE 8080 8443
+EXPOSE 8580 8443
 
 # hadolint ignore=DL3048
 LABEL org.opencontainers.image.title="gomapproxy" \
