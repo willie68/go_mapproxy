@@ -19,6 +19,38 @@ The main goals of **go_mapproxy** are:
 
 ------
 
+## Installation
+
+### with GO
+
+There are many ways to install this little proxy. 
+
+First if you have already golang installed, simply do an
+
+`go install github.com/willie68/go_mapproxy@latest`
+
+After that you can simply start the proxy with `go_mapproxy`
+
+### with Download
+
+There are prebuilded binaries availble in the github repo under 
+
+https://github.com/willie68/go_mapproxy/releases
+
+Take the binary for your OS and extract it into a folder of your choise. There you can start the gomapproxy binary. (don't forget the set the executable flag)
+
+### with Docker
+
+another way is to start this as a docker container. As there are no prebuild images, you have to download and extract the repository. After that start
+
+`docker build -f ./dockerfile -t gomapproxy:latest ./` 
+
+and then start the image with 
+
+`docker run --restart=always --name gomapproxy -p 8580:8580 gomapproxy:latest`
+
+//TODO show how to provide another config file.
+
 ## Usage
 
 ### Basic Proxy
