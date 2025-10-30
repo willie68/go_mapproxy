@@ -54,6 +54,18 @@ func (p *Point) processMonitor(m *defaultMonitor) {
 	p.calculateMonitor(m)
 }
 
+func (p *Point) Inc(v int) {
+	p.calcLock.Lock()
+	defer p.calcLock.Unlock()
+	p.count += v
+}
+
+func (p *Point) IncError(v int) {
+	p.calcLock.Lock()
+	defer p.calcLock.Unlock()
+	p.errorCount += v
+}
+
 func (p *Point) calculateMonitor(m *defaultMonitor) {
 	p.calcLock.Lock()
 	defer p.calcLock.Unlock()
@@ -87,13 +99,14 @@ func (p *Point) Active() int {
 
 func (p *Point) Data() Data {
 	return Data{
-		Name:      p.name,
-		Min:       p.calcTime(p.min),
-		Max:       p.calcTime(p.max),
-		Average:   p.calcTime(p.average),
-		Total:     p.calcTime(p.total),
-		Count:     p.count,
-		MaxActive: p.maxActive,
+		Name:       p.name,
+		Min:        p.calcTime(p.min),
+		Max:        p.calcTime(p.max),
+		Average:    p.calcTime(p.average),
+		Total:      p.calcTime(p.total),
+		Count:      p.count,
+		ErrorCount: p.errorCount,
+		MaxActive:  p.maxActive,
 	}
 }
 

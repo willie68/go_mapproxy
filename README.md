@@ -2,7 +2,7 @@
 
 ## Preface
 
-**go_mapproxy** is a lightweight, high-performance proxy application for Slippy Map (xyz), Tile Map Services (TMS), WMS services and MBTiles files, written in Go. It is designed to provide fast and efficient access to map tiles from various sources, with optional caching and prefetching capabilities. The application is suitable for both production use and for developers who want to build or optimize their own mapping solutions. 
+**go_mapproxy** is a lightweight, high-performance proxy application for Slippy Map (XYZ), Tile Map Services (TMS), WMS services and MBTiles files, written in Go. It is designed to provide fast and efficient access to map tiles from various sources, with optional caching and prefetching capabilities. The application is suitable for both production use and for developers who want to build or optimize their own mapping solutions. 
 
 The original primary purpose was to provide a lightweight service that could be installed on your map client and would proxy XYZ requests to WMS. (see https://github.com/willie68/MCSDepthLoggerUI)
 
@@ -12,7 +12,7 @@ The original primary purpose was to provide a lightweight service that could be 
 
 The main goals of **go_mapproxy** are:
 
-- **Proxy Functionality:** Forward XYZ requests to a XYZ, TMS or WMS map server. Or use a MBTiles File.
+- **Proxy Functionality:** Forward XYZ (Slippy map) requests to a XYZ, TMS or WMS map server. Or use a MBTiles File as tile source.
 - **Caching:** Optionally cache tiles to speed up access and reduce server load.
 - **Prefetching:** Preload tiles for defined zoom levels and map providers.
 - **Simple Configuration:** Use a clear YAML configuration file for quick and easy setup.
@@ -70,11 +70,14 @@ e.g. `http://localhost:8580/tileserver/osm/xyz/4/8/5.png`
 ### Minimal Example without caching
 
 ```yaml
-port: 8580
+http:
+  port: 8580
+  sslport: 0 # set to e.g. 8443 to enable https server
+
 caching:
   active: false
   path: ./tilecache
-  maxage: 2160 # in hours, 90 days = 2160
+  maxage: 168 # in hours, 7d * 24h = 168h
 
 provider:
   gebco:
@@ -193,6 +196,21 @@ provider:
 `fallback` : for mbtiles you can set here an fallback provider. If a tile is not served from the mbtiles file, the app will try to read the file from this provider. Otherwise an empty.png will be displayed.
 `header`: add additional headers, as they may be needed by the provided tile server (like osm)
 
+## Setting up TLS
+
+There are two ways to set up this service with tls, depending if you want to use an already create certificate ( Let's Encrypt as example) or you're ok using self signed certificates.
+For the latter simply add an valid port for the `sslport` config key. A new certificate will be generated automatically on every start.
+
+```yaml
+http:
+  port: 8580
+  sslport: 8443 # set to e.g. 8443 to enable https server
+  certificate: # path and name to the certificate (PEM Format)
+  key: # path and name to the private key (PEM Format)
+```
+
+IF you use an already created certificate simply add the path and name of the PEM files to the config parameters certificate (public part) and key (private part).
+
 ## A word on prefetching of tiles
 
 You can prefetch single/multiple provider with the `system` and `zoom` parameter. All tiles of the the selected provider from 0 to zoom will be prefetched. (At this time no prefetch bonding boxes are configurable) Be aware you need the space for that. Prefechting with level 8 is round about 1GB. (depends on the wms provider) Level 9 ~ 5GB... (And it will take some time)
@@ -200,3 +218,4 @@ You can prefetch single/multiple provider with the `system` and `zoom` parameter
 example: `gomapproxy -c config.yaml -s gebco -z 9`
 
 This will prefetch all tiles from the server with the alias gebco for zoom levels 0 to 9.
+But be aware, some providers as the osm don't allow prefetching. You can swithc prefechting of in the config, but for some providers (like openstreetmap) will be automatically ignored on prefetch. 

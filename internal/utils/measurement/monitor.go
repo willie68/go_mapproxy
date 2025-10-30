@@ -11,6 +11,7 @@ type Monitor interface {
 	IsRunning() bool
 	Accrued() time.Duration
 	Reset()
+	SetError()
 }
 
 var (
@@ -59,6 +60,10 @@ func (m *nullMonitor) Accrued() time.Duration {
 func (m *nullMonitor) Reset() {
 	m.started = false
 	m.paused = false
+}
+
+func (m *nullMonitor) SetError() {
+	// no op
 }
 
 func newMonitor(p *Point) *defaultMonitor {
@@ -133,4 +138,10 @@ func (m *defaultMonitor) Reset() {
 	m.accrued = 0
 	m.running = false
 	m.paused = false
+}
+
+func (m *defaultMonitor) SetError() {
+	if m.point != nil {
+		m.point.IncError(1)
+	}
 }

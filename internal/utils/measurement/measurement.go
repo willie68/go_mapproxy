@@ -13,13 +13,14 @@ type Service struct {
 }
 
 type Data struct {
-	Name      string `json:"name"`
-	Min       int64  `json:"min"`
-	Max       int64  `json:"max"`
-	Average   int64  `json:"average"`
-	Total     int64  `json:"total"`
-	Count     int    `json:"count"`
-	MaxActive int    `json:"maxActive"`
+	Name       string `json:"name"`
+	Min        int64  `json:"min"`
+	Max        int64  `json:"max"`
+	Average    int64  `json:"average"`
+	Total      int64  `json:"total"`
+	Count      int    `json:"count"`
+	ErrorCount int    `json:"errorCount"`
+	MaxActive  int    `json:"maxActive"`
 }
 
 func New(active bool) *Service {
