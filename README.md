@@ -49,7 +49,78 @@ and then start the image with
 
 `docker run --restart=always --name gomapproxy -p 8580:8580 gomapproxy:latest`
 
-//TODO show how to provide another config file.
+#### providing a config with docker
+
+If you like to provide another config for the map proxy, you can put the config into a directory on your host. e.g. i'll use e:\daten\docker\gomapproxy as a root for all gomapproxy on docker related files. The structure here ist something like that:
+
+```
+e:\daten\docker\gomapproxy\
+   +-- cache\ <- folder for the cache
+   +-- config.yaml <- the configuration for the service
+   +-- OSM-OpenCPN2-Adria.mbtiles <- a mbtiles file of the adria region from OpenSeaMap
+   
+```
+
+The config for that is here (for a description see [Configuration Examples](#Configuration Examples):
+
+```yaml
+http:
+  port: 8580
+  sslport: 8443 # set to e.g. 8443 to enable https server
+
+cache:
+  active: true
+  path: /opt/gomapproxy/cache
+  maxage: 168 # in hours, 7d * 24h = 168h
+
+logging:
+  level: debug
+
+provider: 
+  gebco:
+    url: https://geoserver.openseamap.org/geoserver/gwc/service/wms
+    type: wms
+    layers: gebco2021:gebco_2021
+    format: image/png
+    nocache: false
+  osmde:
+    url:  https://tile.openstreetmap.de
+    type: xyz
+    format: image/png
+    nocache: false
+    noprefetch: true
+    headers:
+      Accept: image/png
+      User-Agent: gomapproxy v0.1.8
+  adria:
+    type: mbtiles
+    path: /opt/gomapproxy/mbtiles/OSM-OpenCPN2-Adria.mbtiles
+    nocache: true
+    fallback: osmde
+
+```
+
+start this service with
+`docker run -d --restart=always --name gomapproxy -p 8580:8580 -p 8443:8443 -v e:\daten\docker\gomapproxy\config.yaml:/config/config.yaml -v e:\daten\docker\gomapproxy\cache:/opt/gomapproxy/cache -v e:\daten\docker\gomapproxy\OSM-OpenCPN2-Adria.mbtiles:/opt/gomapproxy/mbtiles/OSM-OpenCPN2-Adria.mbtiles gomapproxy:latest`
+
+- `-d`: just start the container and come back to terminal
+- `-restart=always`  will always restart the service after reboot
+- `--name gomapproxy`  name of the running container
+- `-p...` map the internal ports 8580 and 8443 to the same external ports. If you need other ports on your host, change the first parameter `-p 8080:8580` will use the 8080 port on the host for the http interface. (If you set a ssl port, only that port will provide the tiles)
+- `-v`: here comes the mapping part:
+  - first map the config.yaml file of the host to the internal location
+  - second map is for the cache directory. After start you will find all the cache files in your host directory
+  - third mapping is for the mbtiles file
+- the last part is the name of the image
+
+After that you can see in your container with the `docker ps` command. There should be a line like this:
+
+```
+CONTAINER ID   IMAGE                 COMMAND                  CREATED         STATUS          PORTS                                                                                      NAMES
+cccf0c03e563   gomapproxy:latest     "/service --config /…"   3 minutes ago   Up 3 minutes    0.0.0.0:8580->8580/tcp, [::]:8580->8580/tcp, 0.0.0.0:9443->9443/tcp, [::]:9443->9443/tcp   gomapproxy
+```
+
+
 
 ## Usage
 
