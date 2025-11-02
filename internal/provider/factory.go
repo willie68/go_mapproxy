@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -34,7 +35,7 @@ type Config struct {
 }
 
 type pFactory struct {
-	log      *logging.Logger
+	log      *slog.Logger
 	configs  ConfigMap
 	services []string
 	inj      do.Injector
@@ -50,7 +51,7 @@ type providerConfig interface {
 
 func Init(inj do.Injector) {
 	sf := pFactory{
-		log:      logging.New().WithName("factory"),
+		log:      logging.New("factory"),
 		configs:  do.MustInvokeAs[providerConfig](inj).GetProviderConfig(),
 		services: make([]string, 0),
 		inj:      inj,
@@ -61,7 +62,7 @@ func Init(inj do.Injector) {
 		case "wms":
 			var s Service = &wmsProvider{
 				name:   sname,
-				log:    logging.New().WithName(fmt.Sprintf("wms: %s", sname)),
+				log:    logging.New(fmt.Sprintf("wms: %s", sname)),
 				config: config,
 			}
 			do.ProvideNamedValue(inj, sname, s)
@@ -69,7 +70,7 @@ func Init(inj do.Injector) {
 		case "tms":
 			var s Service = &tmsProvider{
 				name:   sname,
-				log:    logging.New().WithName(fmt.Sprintf("tms: %s", sname)),
+				log:    logging.New(fmt.Sprintf("tms: %s", sname)),
 				config: config,
 				isTMS:  true,
 			}
@@ -78,7 +79,7 @@ func Init(inj do.Injector) {
 		case "xyz":
 			var s Service = &tmsProvider{
 				name:   sname,
-				log:    logging.New().WithName(fmt.Sprintf("xyz: %s", sname)),
+				log:    logging.New(fmt.Sprintf("xyz: %s", sname)),
 				config: config,
 				isTMS:  false,
 			}

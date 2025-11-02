@@ -11,7 +11,7 @@ import (
 	"github.com/willie68/go_mapproxy/pkg/extstrgutils"
 )
 
-var log = logging.New().WithName("prefetch")
+var log = logging.New("prefetch")
 
 type Config struct {
 	Workers int `yaml:"workers"` // number of parallel workers
@@ -40,7 +40,7 @@ func Init(inj do.Injector) {
 func Prefetch(providers string, maxzoom int) {
 	if providers != "" && maxzoom > 0 {
 		go func() {
-			log.Infof("starting prefetch for providers \"%s\" with zoom %d", providers, maxzoom)
+			log.Info(fmt.Sprintf("starting prefetch for providers \"%s\" with zoom %d", providers, maxzoom))
 			prefetch(providers, maxzoom)
 			log.Info("prefetch finnished")
 		}()
@@ -68,11 +68,11 @@ func prefetch(providers string, maxzoom int) error {
 				if ts.IsPrefetchable(j.Provider) {
 					rd, err := ts.FTile(j)
 					if err != nil {
-						log.Errorf("error getting tile: %v", err)
+						log.Error(fmt.Sprintf("error getting tile: %v", err))
 						continue
 					}
 					defer rd.Close()
-					log.Infof("fetched tile: %v", j)
+					log.Info(fmt.Sprintf("fetched tile: %v", j))
 				}
 			}
 		})

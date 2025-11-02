@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/i0tool5/mbtiles-go"
 	"github.com/samber/do/v2"
@@ -29,7 +30,7 @@ type metadata struct {
 
 type mbtilesProvider struct {
 	name   string
-	log    *logging.Logger
+	log    *slog.Logger
 	db     *mbtiles.MBtiles
 	fbname string
 	fb     bool
@@ -38,18 +39,18 @@ type mbtilesProvider struct {
 }
 
 func NewMBTilesProvider(name string, config Config, inj do.Injector) *mbtilesProvider {
-	log := logging.New().WithName(fmt.Sprintf("mbtiles: %s", name))
+	log := logging.New(fmt.Sprintf("mbtiles: %s", name))
 	db, err := mbtiles.Open(config.Path)
 	if err != nil {
-		log.Errorf("failed to open mbtiles database: %v", err)
+		log.Error(fmt.Sprintf("failed to open mbtiles database: %v", err))
 	}
 	tf := db.GetTileFormat()
-	log.Infof("mbtiles format: %s", tf.String())
+	log.Info(fmt.Sprintf("mbtiles format: %s", tf.String()))
 	meta, err := db.ReadMetadata()
 	if err != nil {
-		log.Errorf("failed to read mbtiles metadata: %v", err)
+		log.Error(fmt.Sprintf("failed to read mbtiles metadata: %v", err))
 	}
-	log.Infof("mbtiles metadata: %+v", meta)
+	log.Info(fmt.Sprintf("mbtiles metadata: %+v", meta))
 	mbt := &mbtilesProvider{
 		name:   name,
 		log:    log,
@@ -70,7 +71,7 @@ func (s *mbtilesProvider) Tile(tile model.Tile) (io.ReadCloser, error) {
 		if s.fb {
 			return s.fallback(tile)
 		}
-		s.log.Errorf("zoom level %d out of bounds (%d - %d)", tile.Z, s.meta.Minzoom, s.meta.Maxzoom)
+		s.log.Error(fmt.Sprintf("zoom level %d out of bounds (%d - %d)", tile.Z, s.meta.Minzoom, s.meta.Maxzoom))
 		return assets.EmptyPNG(), nil
 
 	}
@@ -80,7 +81,7 @@ func (s *mbtilesProvider) Tile(tile model.Tile) (io.ReadCloser, error) {
 			if s.fb {
 				return s.fallback(tile)
 			}
-			s.log.Errorf("tile %d/%d/%d out of bounds", tile.Z, tile.X, tile.Y)
+			s.log.Error(fmt.Sprintf("tile %d/%d/%d out of bounds", tile.Z, tile.X, tile.Y))
 			return assets.EmptyPNG(), nil
 		}
 	}
@@ -89,7 +90,7 @@ func (s *mbtilesProvider) Tile(tile model.Tile) (io.ReadCloser, error) {
 		if s.fb {
 			return s.fallback(tile)
 		}
-		s.log.Errorf("failed to read tile: %v", err)
+		s.log.Error(fmt.Sprintf("failed to read tile: %v", err))
 		return assets.EmptyPNG(), nil
 	}
 	return io.NopCloser(io.Reader(bytes.NewReader(data))), nil
@@ -101,12 +102,12 @@ func (s *mbtilesProvider) fallback(tile model.Tile) (io.ReadCloser, error) {
 	}
 	fbts, err := do.InvokeAs[providerService](s.inj)
 	if err != nil {
-		s.log.Errorf("failed to invoke fallback provider '%s': %v", s.fbname, err)
+		s.log.Error(fmt.Sprintf("failed to invoke fallback provider '%s': %v", s.fbname, err))
 		s.fb = false
 		return assets.EmptyPNG(), nil
 	}
 	if !fbts.HasProvider(s.fbname) {
-		s.log.Errorf(fmt.Sprintf("fallback provider '%s' not found", s.fbname))
+		s.log.Error(fmt.Sprintf("fallback provider '%s' not found", s.fbname))
 		s.fb = false
 		return assets.EmptyPNG(), nil
 	}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -25,7 +26,7 @@ type Config struct {
 }
 
 type Cache struct {
-	log    *logging.Logger
+	log    *slog.Logger
 	path   string
 	active bool
 	maxage int // in hours
@@ -46,7 +47,7 @@ type dbEntry struct {
 func Init(inj do.Injector) {
 	cfg := do.MustInvokeAs[tcConfig](inj).GetCacheConfig()
 	c := &Cache{
-		log:    logging.New().WithName("tilecache"),
+		log:    logging.New("tilecache"),
 		path:   cfg.Path,
 		active: cfg.Active,
 		maxage: cfg.MaxAge,
@@ -59,7 +60,7 @@ func Init(inj do.Injector) {
 	if c.active {
 		db, err := badger.Open(badger.DefaultOptions(c.getDBPath()).WithValueLogFileSize(100 * 1024 * 1024))
 		if err != nil {
-			c.log.Errorf("failed to open badger db: %v", err)
+			c.log.Error(fmt.Sprintf("failed to open badger db: %v", err))
 		}
 		c.db = db
 		c.startValueLogGCTicker()
@@ -74,9 +75,9 @@ func (c *Cache) startCacheCleanupJob() {
 			<-ticker.C
 			err := c.CleanupOldFiles(time.Duration(c.maxage) * time.Hour)
 			if err != nil {
-				c.log.Errorf("cache cleanup error: %v", err)
+				c.log.Error(fmt.Sprintf("cache cleanup error: %v", err))
 			} else {
-				c.log.Infof("cache cleanup completed")
+				c.log.Info(fmt.Sprintf("cache cleanup completed"))
 			}
 		}
 	}()
@@ -90,9 +91,9 @@ func (c *Cache) startValueLogGCTicker() {
 			<-ticker.C
 			err := c.db.RunValueLogGC(0.5)
 			if err != nil {
-				c.log.Errorf("value log GC error: %v", err)
+				c.log.Error(fmt.Sprintf("value log GC error: %v", err))
 			} else {
-				c.log.Infof("value log GC completed")
+				c.log.Info(fmt.Sprintf("value log GC completed"))
 			}
 		}
 	}()
@@ -138,19 +139,19 @@ func (c *Cache) Tile(tile model.Tile) (io.ReadCloser, bool) {
 	defer c.flock.RUnlock()
 	fi, err := os.Stat(file)
 	if err != nil {
-		c.log.Errorf("cache file %s not found", file)
+		c.log.Error(fmt.Sprintf("cache file %s not found", file))
 		return nil, false
 	}
 	if c.isRejected(fi) {
 		err := os.Remove(file)
 		if err != nil {
-			c.log.Errorf("error removing rejected cache file %s: %v", file, err)
+			c.log.Error(fmt.Sprintf("error removing rejected cache file %s: %v", file, err))
 		}
-		c.log.Errorf("cache file %s is rejected", file)
+		c.log.Error(fmt.Sprintf("cache file %s is rejected", file))
 		return nil, false
 	}
 	if fi.Size() < 100 {
-		c.log.Errorf("cache file %s is too small", file)
+		c.log.Error(fmt.Sprintf("cache file %s is too small", file))
 		return nil, false
 	}
 	f, err := os.Open(file)
@@ -263,7 +264,7 @@ func (c *Cache) CleanupOldFiles(olderThan time.Duration) error {
 		}
 		modTime := info.ModTime()
 		if now.Sub(modTime) > olderThan {
-			c.log.Debugf("removing old cache file: %s", path)
+			c.log.Debug(fmt.Sprintf("removing old cache file: %s", path))
 			c.deleteFile(path)
 		}
 		return nil
@@ -275,20 +276,20 @@ func (c *Cache) deleteFile(path string) {
 	defer c.flock.Unlock()
 	err := os.Remove(path)
 	if err != nil {
-		c.log.Errorf("error removing file %s: %v", path, err)
+		c.log.Error(fmt.Sprintf("error removing file %s: %v", path, err))
 	}
 }
 
 func (c *Cache) GetFileHash(fileStr string) string {
 	f, err := os.Open(fileStr)
 	if err != nil {
-		c.log.Fatalf("error opening file: %v", err)
+		c.log.Error(fmt.Sprintf("error opening file: %v", err))
 	}
 	defer f.Close()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
-		c.log.Fatalf("error building hash: %v", err)
+		c.log.Error(fmt.Sprintf("error building hash: %v", err))
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }

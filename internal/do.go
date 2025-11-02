@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/samber/do/v2"
@@ -15,24 +16,20 @@ import (
 	"github.com/willie68/go_mapproxy/internal/utils/measurement"
 )
 
-var Inj do.Injector
-
-func Init() {
-	Inj = do.New()
-
-	config.Init(Inj)
-	logging.Init(Inj)
+func Init(inj do.Injector) {
+	config.Init(inj)
+	logging.Init(inj)
 
 	metrics := measurement.New(true)
-	do.ProvideValue(Inj, metrics)
+	do.ProvideValue(inj, metrics)
 
-	prefetch.Init(Inj)
+	prefetch.Init(inj)
 
-	provider.Init(Inj)
-	tilecache.Init(Inj)
-	tiles.Init(Inj)
+	provider.Init(inj)
+	tilecache.Init(inj)
+	tiles.Init(inj)
 
-	shttp.NewSHttp(Inj)
+	shttp.NewSHttp(inj)
 }
 
 type tileCache interface {
@@ -40,10 +37,10 @@ type tileCache interface {
 	Close() error
 }
 
-func Stop() {
-	tc := do.MustInvokeAs[tileCache](Inj)
+func Stop(inj do.Injector) {
+	tc := do.MustInvokeAs[tileCache](inj)
 	err := tc.Close()
 	if err != nil {
-		logging.New().WithName("internal").Errorf("error on close tilecache: %v", err)
+		logging.New("internal").Error(fmt.Sprintf("error on close tilecache: %v", err))
 	}
 }

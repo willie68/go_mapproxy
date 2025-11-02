@@ -4,24 +4,24 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 
-	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/mercantile"
 	"github.com/willie68/go_mapproxy/internal/model"
 )
 
 type wmsProvider struct {
 	name   string
-	log    *logging.Logger
+	log    *slog.Logger
 	config Config
 	cl     *http.Client
 }
 
 func (s *wmsProvider) Tile(tile model.Tile) (io.ReadCloser, error) {
 	wmsURL := s.buildWMSUrl(s.tileToBBox(tile))
-	s.log.Debugf("Requesting WMS tile from %s", wmsURL)
+	s.log.Debug(fmt.Sprintf("Requesting WMS tile from %s", wmsURL))
 
 	if s.cl == nil {
 		s.cl = &http.Client{}
@@ -45,9 +45,9 @@ func (s *wmsProvider) Tile(tile model.Tile) (io.ReadCloser, error) {
 				return nil, errors.New("read error")
 			}
 			bodyString := string(bodyBytes)
-			s.log.Errorf("body: %s", bodyString)
+			s.log.Error(fmt.Sprintf("body: %s", bodyString))
 		}
-		s.log.Errorf("error on wms request, status: %s: %v", resp.Status, err)
+		s.log.Error(fmt.Sprintf("error on wms request, status: %s: %v", resp.Status, err))
 		return nil, errors.New("Tile error")
 	}
 	return resp.Body, nil
@@ -78,7 +78,7 @@ func (s *wmsProvider) buildWMSUrl(bb mercantile.Bbox) string {
 	base.RawQuery = params.Encode()
 	wmsURL := base.String()
 
-	s.log.Debugf("wms url: %s", wmsURL)
+	s.log.Debug(fmt.Sprintf("wms url: %s", wmsURL))
 	return wmsURL
 }
 

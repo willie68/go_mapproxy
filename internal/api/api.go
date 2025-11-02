@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -8,22 +9,20 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/go-chi/render"
 	"github.com/samber/do/v2"
-	"github.com/willie68/go_mapproxy/internal"
+	"github.com/willie68/go_mapproxy/internal/apiv1"
 	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/utils/measurement"
 )
 
-// defining all sub pathes for api v1
+// MetricsEndpoint endpoint subpath  for metrics
 const (
-	// APIVersion the actual implemented api version
-	APIVersion = "1"
 	// MetricsEndpoint endpoint subpath  for metrics
 	metricsEndpoint = "/metrics"
 	// TileserverEndpoint endpoint subpath for tile server
 	tileserverEndpoint = "/tileserver"
 )
 
-var logger = logging.New().WithName("api")
+var logger = logging.New("api")
 
 // Handler a http REST interface handler
 type Handler interface {
@@ -38,19 +37,19 @@ func APIRoutes(inj do.Injector) (*chi.Mux, error) {
 
 	// building the routes
 	router.Route("/", func(r chi.Router) {
-		r.Mount(tileserverEndpoint, NewXYZHandler(internal.Inj))
-		r.Mount(metricsEndpoint, measurement.Routes(internal.Inj))
+		r.Mount(tileserverEndpoint, apiv1.NewXYZHandler(inj))
+		r.Mount(metricsEndpoint, measurement.Routes(inj))
 	})
 	// adding a file server with web client asserts
 	logger.Info("api routes")
 
 	walkFunc := func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
-		logger.Infof("api route: %s %s", method, route)
+		logger.Info(fmt.Sprintf("api route: %s %s", method, route))
 		return nil
 	}
 
 	if err := chi.Walk(router, walkFunc); err != nil {
-		logger.Alertf("could not walk api routes. %s", err.Error())
+		logger.Warn(fmt.Sprintf("could not walk api routes. %s", err.Error()))
 	}
 	return router, nil
 }
@@ -83,16 +82,16 @@ func HealthRoutes(inj do.Injector) *chi.Mux {
 	)
 
 	router.Route("/", func(r chi.Router) {
-		r.Mount("/health/metrics", measurement.Routes(internal.Inj))
+		r.Mount("/health/metrics", measurement.Routes(inj))
 	})
 
 	logger.Info("health api routes")
 	walkFunc := func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
-		logger.Infof("health route: %s %s", method, route)
+		logger.Info(fmt.Sprintf("health route: %s %s", method, route))
 		return nil
 	}
 	if err := chi.Walk(router, walkFunc); err != nil {
-		logger.Alertf("could not walk health routes. %s", err.Error())
+		logger.Warn(fmt.Sprintf("could not walk health routes. %s", err.Error()))
 	}
 
 	return router

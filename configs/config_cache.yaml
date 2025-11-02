@@ -1,4 +1,5 @@
 http:
+  servicename: gomapproxy
   port: 8580
   sslport: 9443 # set to e.g. 8443 to enable https server
 

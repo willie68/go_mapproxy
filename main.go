@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 
@@ -18,13 +19,14 @@ import (
 )
 
 var (
-	log         *logging.Logger
+	log         *slog.Logger
 	configFile  string
 	showVersion bool
 	initConfig  bool
 	pfZoom      int
 	pfProviders string
 	port        int
+	inj         do.Injector
 )
 
 func init() {
@@ -75,21 +77,21 @@ func main() {
 		panic("error on marshal config to json")
 	}
 	fmt.Printf("Config:\n%s\n", js)
-	log = logging.New().WithName("main")
+	log = logging.New("main")
 	log.Info("starting tile service")
 
-	internal.Init()
+	internal.Init(inj)
 
 	prefetch.Prefetch(pfProviders, pfZoom)
 
-	router, err := api.APIRoutes(internal.Inj)
+	router, err := api.APIRoutes(inj)
 	if err != nil {
-		log.Errorf("could not create api routes: %v", err)
+		log.Error(fmt.Sprintf("could not create api routes: %v", err))
 		os.Exit(1)
 	}
-	healthRouter := api.HealthRoutes(internal.Inj)
+	healthRouter := api.HealthRoutes(inj)
 
-	sh := do.MustInvoke[shttp.SHttp](internal.Inj)
+	sh := do.MustInvoke[shttp.SHttp](inj)
 	sh.StartServers(router, healthRouter)
 
 	log.Info("waiting for clients")
@@ -100,7 +102,7 @@ func main() {
 	sh.ShutdownServers()
 	log.Info("server finished")
 
-	internal.Stop()
+	internal.Stop(inj)
 	os.Exit(0)
 }
 

@@ -4,15 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
-	"github.com/willie68/go_mapproxy/internal/logging"
 	"github.com/willie68/go_mapproxy/internal/model"
 )
 
 type tmsProvider struct {
 	name   string
-	log    *logging.Logger
+	log    *slog.Logger
 	config Config
 	isTMS  bool
 	cl     *http.Client
@@ -20,7 +20,7 @@ type tmsProvider struct {
 
 func (s *tmsProvider) Tile(tile model.Tile) (io.ReadCloser, error) {
 	tmsURL := s.buildTMSUrl(tile)
-	s.log.Debugf("Requesting TMS tile from %s", tmsURL)
+	s.log.Debug(fmt.Sprintf("Requesting TMS tile from %s", tmsURL))
 	if s.cl == nil {
 		s.cl = &http.Client{}
 	}
@@ -42,9 +42,9 @@ func (s *tmsProvider) Tile(tile model.Tile) (io.ReadCloser, error) {
 					return nil, errors.New("read error")
 				}
 				bodyString := string(bodyBytes)
-				s.log.Errorf("body: %s", bodyString)
+				s.log.Error(fmt.Sprintf("body: %s", bodyString))
 			}
-			s.log.Errorf("error on wms request, status: %s: %v", resp.Status, err)
+			s.log.Error(fmt.Sprintf("error on wms request, status: %s: %v", resp.Status, err))
 		}
 		return nil, fmt.Errorf("Tile error: %v", err)
 	}

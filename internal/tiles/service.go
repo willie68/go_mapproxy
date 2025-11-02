@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/samber/do/v2"
 	"github.com/willie68/go_mapproxy/internal/logging"
@@ -27,7 +28,7 @@ type tileCache interface {
 
 type service struct {
 	inj     do.Injector
-	log     *logging.Logger
+	log     *slog.Logger
 	cache   tileCache
 	tssf    providerFactory
 	metrics *measurement.Service
@@ -36,7 +37,7 @@ type service struct {
 func Init(inj do.Injector) {
 	do.ProvideValue(inj, &service{
 		inj:     inj,
-		log:     logging.New().WithName("tiles"),
+		log:     logging.New("tiles"),
 		cache:   do.MustInvokeAs[tileCache](inj),
 		tssf:    do.MustInvokeAs[providerFactory](inj),
 		metrics: do.MustInvoke[*measurement.Service](inj),
@@ -52,7 +53,7 @@ func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
 		td := s.metrics.Start("getTileFromCache")
 		if tr, ok := s.cache.Tile(tile); ok {
 			td.Stop()
-			s.log.Debugf("tile found in cache: %s", tile.String())
+			s.log.Debug(fmt.Sprintf("tile found in cache: %s", tile.String()))
 			return tr, nil
 		}
 		td.Stop()
@@ -60,7 +61,7 @@ func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
 
 	ts, err := do.InvokeNamed[provider.Service](s.inj, tile.Provider)
 	if err != nil {
-		s.log.Errorf("System error: %v", err)
+		s.log.Error(fmt.Sprintf("System error: %v", err))
 		return nil, err
 	}
 
@@ -68,7 +69,7 @@ func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
 	tsd := s.metrics.Start(fmt.Sprintf("getTileFromProvider:%s", tile.Provider))
 	rd, err := ts.Tile(tile)
 	if err != nil {
-		s.log.Errorf("error getting tile from tileserver: %v", err)
+		s.log.Error(fmt.Sprintf("error getting tile from tileserver: %v", err))
 		return nil, err
 	}
 	tsd.Stop()
@@ -91,7 +92,7 @@ func (s *service) FTile(tile model.Tile) (io.ReadCloser, error) {
 			defer td.Stop()
 			err = s.cache.Save(tile, rd)
 			if err != nil {
-				s.log.Errorf("error saving tile to cache: %v", err)
+				s.log.Error(fmt.Sprintf("error saving tile to cache: %v", err))
 			}
 		}()
 	}

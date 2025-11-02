@@ -1,9 +1,10 @@
-package api
+package apiv1
 
 import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -21,15 +22,15 @@ type providerService interface {
 	FTile(tile model.Tile) (io.ReadCloser, error)
 }
 
-type TMSHandler struct {
-	log     *logging.Logger
+type XYZHandler struct {
+	log     *slog.Logger
 	tiles   providerService
 	metrics *measurement.Service
 }
 
 func NewXYZHandler(inj do.Injector) *chi.Mux {
-	th := &TMSHandler{
-		log:     logging.New().WithName("api"),
+	th := &XYZHandler{
+		log:     logging.New("api"),
 		tiles:   do.MustInvokeAs[providerService](inj),
 		metrics: do.MustInvokeAs[*measurement.Service](inj),
 	}
@@ -38,13 +39,13 @@ func NewXYZHandler(inj do.Injector) *chi.Mux {
 	return router
 }
 
-func (h *TMSHandler) GetSystemHandler(inj do.Injector) http.HandlerFunc {
+func (h *XYZHandler) GetSystemHandler(inj do.Injector) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		td := h.metrics.Start("getTile")
 		defer td.Stop()
 
 		// URL: /tileserver/{provider}/xyz/{z}/{x}/{y}.png
-		h.log.Infof("path: %s", r.URL.Path)
+		h.log.Info(fmt.Sprintf("path: %s", r.URL.Path))
 		tile, err := h.getRequestParameter(r)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Path error: %s", err.Error()), http.StatusBadRequest)
@@ -53,7 +54,7 @@ func (h *TMSHandler) GetSystemHandler(inj do.Injector) http.HandlerFunc {
 
 		rd, err := h.tiles.FTile(tile)
 		if err != nil {
-			h.log.Errorf("System error: %v", err)
+			h.log.Error("System error: %v", err)
 			http.Error(w, fmt.Sprintf("System error: %s", err.Error()), http.StatusInternalServerError)
 			return
 		}
@@ -64,7 +65,7 @@ func (h *TMSHandler) GetSystemHandler(inj do.Injector) http.HandlerFunc {
 	})
 }
 
-func (h *TMSHandler) getRequestParameter(r *http.Request) (tile model.Tile, err error) {
+func (h *XYZHandler) getRequestParameter(r *http.Request) (tile model.Tile, err error) {
 	tile.Provider = chi.URLParam(r, "provider")
 	zs := chi.URLParam(r, "z")
 	xs := chi.URLParam(r, "x")
@@ -94,7 +95,7 @@ func (h *TMSHandler) getRequestParameter(r *http.Request) (tile model.Tile, err 
 }
 
 // Checks if the given TMS coordinates are valid for the given zoom level.
-func (h *TMSHandler) isValidXYZCoord(x, y, zoom int) bool {
+func (h *XYZHandler) isValidXYZCoord(x, y, zoom int) bool {
 	if zoom < 0 {
 		return false
 	}

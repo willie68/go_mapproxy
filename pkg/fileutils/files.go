@@ -3,6 +3,7 @@ package fileutils
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/url"
@@ -75,13 +76,13 @@ func ValidPathName(s string) string {
 func HashFile(filename string) string {
 	f, err := os.Open(filename)
 	if err != nil {
-		logging.Root.Errorf("%v", err)
+		logging.Root.Error(fmt.Sprintf("%v", err))
 	}
 	defer f.Close()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
-		logging.Root.Errorf("%v", err)
+		logging.Root.Error(fmt.Sprintf("%v", err))
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }

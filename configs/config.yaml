@@ -1,12 +1,25 @@
 http:
+  servicename: gomaproxy
   port: 8580 # port of the local http server
-  sslport: 0 # set to e.g. 8443 to enable https server
+  sslport: 9443 # set to e.g. 9443 to enable https server or 0 to disable https
+  # this is the servicURL from outside
+  serviceURL: https://localhost:9443
 
 cache: 
   active: false # to activate the cache set this to true
   path: ./cache  # folder to the cache, relativ or absolute
   maxage: 2160 # max age of the tiles in hours, 90 days = 2160, will be automatically deleted
+#configure the healthcheck system
+healthcheck:
+  # period in seconds to start the healtcheck
+  period: 30
+  startdelay: 3
 
+# enable/disable metrics 
+metrics:
+  enable: false
+
+# configure the logging system
 logging:
   level: info # logging only info messages, for more switch to debug, only errors, error would be aproriate
   filename: # set some filename wil activate an automatic file logger
